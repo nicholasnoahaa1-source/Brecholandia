@@ -21,15 +21,23 @@ npm run api      # servidor + MongoDB na porta 3001
 npm run dev      # site com recarregamento; /api é repassado para a porta 3001
 ```
 
-## Colocar no ar
+## Colocar no ar na Vercel
+
+O projeto já vem configurado (`vercel.json`): o site é gerado pelo Vite e a API roda como função em `api/index.js`.
+
+1. Importe o repositório na Vercel (*Add New → Project*).
+2. Em *Settings → Environment Variables*, crie `MONGODB_URI` com a string de conexão do Atlas (e `MONGODB_DB` se quiser outro nome de banco).
+3. No Atlas, em *Network Access*, libere `0.0.0.0/0`. As funções da Vercel não têm IP fixo, então essa é a forma indicada pelo próprio MongoDB; a proteção fica por conta do usuário e da senha do banco.
+4. Faça o deploy.
+
+Limite da Vercel: cada envio aceita até 4,5 MB. O site já reduz as fotos antes de enviar e avisa se as fotos novas de uma peça passarem do limite.
+
+## Outra hospedagem Node
 
 ```bash
-npm install
-npm run build    # gera dist/
-npm start        # o mesmo servidor entrega o site e a API (porta PORT, padrão 3001)
+npm run build
+npm start        # entrega o site e a API na porta PORT (padrão 3001)
 ```
-
-Funciona em qualquer hospedagem que rode Node 20.12+ (Render, Railway, Fly.io, uma VPS…). Defina `MONGODB_URI` nas variáveis de ambiente da hospedagem. Em produção (`NODE_ENV=production`, que o `npm start` já define) o cookie de sessão exige HTTPS.
 
 ## Testes
 

@@ -1,5 +1,5 @@
-// Reduz a foto no navegador antes de guardar, para caber no armazenamento local.
-export async function compressImage(file: File, maxSide = 1100, quality = 0.78): Promise<string> {
+// Reduz a foto no navegador antes de enviar, para caber no limite de envio e no banco.
+export async function compressImage(file: File, maxSide = 1000, quality = 0.75): Promise<string> {
   const url = URL.createObjectURL(file)
   try {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {

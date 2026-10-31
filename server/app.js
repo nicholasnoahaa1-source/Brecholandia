@@ -38,7 +38,7 @@ export function createApp(db, { secureCookies = false } = {}) {
   const app = express()
   app.disable('x-powered-by')
   app.set('trust proxy', 1)
-  app.use('/api', express.json({ limit: '16mb' }))
+  app.use('/api', express.json({ limit: '4mb' }))
 
   // Descobre quem está logado a partir do cookie de sessão.
   app.use('/api', async (req, _res, next) => {

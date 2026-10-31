@@ -72,6 +72,9 @@ export default function PieceForm() {
       status: existing?.status ?? 'disponivel',
       createdAt: existing?.createdAt ?? Date.now(),
     }
+    // A Vercel aceita até 4,5 MB por envio; as fotos novas vão junto com a peça.
+    const payload = photos.filter((p) => p.startsWith('data:')).reduce((n, p) => n + p.length, 0)
+    if (payload > 3_800_000) return setError('As fotos novas passam do limite de envio. Salve com menos fotos e adicione o resto depois.')
     setSaving(true)
     setError('')
     try {
