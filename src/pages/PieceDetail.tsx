@@ -10,12 +10,13 @@ export default function PieceDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const piece = useDB((d) => d.pieces.find((p) => p.id === id))
-  const reservations = useDB((d) => d.reservations)
+  const reservations = useDB((d) => d.myReservations)
   const store = useDB((d) => d.store)
   const user = useCurrentUser()
   const [photo, setPhoto] = useState(0)
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
 
   if (!piece) {
     return (
@@ -29,7 +30,7 @@ export default function PieceDetail() {
     )
   }
 
-  const mine = reservations.find((r) => r.pieceId === piece.id && r.status === 'ativa' && r.userId === user?.id)
+  const mine = reservations.find((r) => r.pieceId === piece.id && r.status === 'ativa')
   const deadline = mine ? holdDeadline(mine, store) : null
   const cond = conditionById(piece.condition)
 
@@ -53,14 +54,17 @@ export default function PieceDetail() {
     ],
   ]
 
-  const doReserve = () => {
-    if (!user) return
+  const doReserve = async () => {
+    if (!user || busy) return
+    setBusy(true)
+    setError('')
     try {
-      reserve(piece.id, user.id)
+      await reserve(piece.id)
       setConfirming(false)
-      setError('')
     } catch (e) {
       setError((e as Error).message)
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -180,8 +184,8 @@ export default function PieceDetail() {
                     {store.holdDays && <p>Prazo para retirar: {store.holdDays} dia(s) após a reserva.</p>}
                     {store.payment && <p>Pagamento: {store.payment}</p>}
                     <div className="confirm-row">
-                      <motion.button className="btn" onClick={doReserve} whileTap={{ scale: 0.97 }} transition={spring}>
-                        Confirmar reserva
+                      <motion.button className="btn" onClick={doReserve} disabled={busy} whileTap={{ scale: 0.97 }} transition={spring}>
+                        {busy ? 'Reservando…' : 'Confirmar reserva'}
                       </motion.button>
                       <button className="link-btn" onClick={() => setConfirming(false)}>
                         Cancelar

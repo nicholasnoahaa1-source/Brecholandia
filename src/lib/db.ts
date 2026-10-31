@@ -2,9 +2,9 @@ import { useSyncExternalStore } from 'react'
 import type { Condition } from './taxonomy'
 
 /*
- * Banco local (localStorage). Serve para rodar o site sem servidor.
- * Cada navegador tem o seu próprio banco: para várias pessoas usarem
- * o mesmo catálogo é preciso trocar estas funções por uma API/backend.
+ * Cliente da API (servidor Node + MongoDB, pasta server/).
+ * Mantém um cache em memória que os componentes leem com useDB().
+ * Toda alteração passa pelo servidor e depois atualiza o cache.
  */
 
 export type Piece = {
@@ -30,10 +30,7 @@ export type User = {
   name: string
   email: string
   phone: string
-  passwordHash: string
-  salt: string
   role: 'admin' | 'cliente'
-  createdAt: number
 }
 
 export type Reservation = {
@@ -43,6 +40,8 @@ export type Reservation = {
   status: 'ativa' | 'retirada' | 'cancelada'
   createdAt: number
   closedAt?: number
+  piece: Piece | null
+  customer?: { name: string; phone: string; email: string } | null
 }
 
 export type StoreInfo = {
@@ -55,163 +54,133 @@ export type StoreInfo = {
 }
 
 type Data = {
+  ready: boolean
+  offline: boolean
   pieces: Piece[]
-  users: User[]
-  reservations: Reservation[]
   store: StoreInfo
-  session: string | null
+  user: User | null
+  hasUsers: boolean
+  myReservations: Reservation[]
+  allReservations: Reservation[]
 }
 
-const KEY = 'brecholandia:v1'
-
-const empty: Data = {
+let data: Data = {
+  ready: false,
+  offline: false,
   pieces: [],
-  users: [],
-  reservations: [],
   store: { address: '', hours: '', contact: '', holdDays: '', payment: '', notes: '' },
-  session: null,
+  user: null,
+  hasUsers: true,
+  myReservations: [],
+  allReservations: [],
 }
 
-function load(): Data {
-  try {
-    const raw = localStorage.getItem(KEY)
-    if (!raw) return structuredClone(empty)
-    const parsed = JSON.parse(raw)
-    return { ...structuredClone(empty), ...parsed, store: { ...empty.store, ...parsed.store } }
-  } catch {
-    return structuredClone(empty)
-  }
-}
-
-let data = load()
 const listeners = new Set<() => void>()
-
-function commit(next: Data) {
-  data = next
-  try {
-    localStorage.setItem(KEY, JSON.stringify(data))
-  } catch (err) {
-    // Normalmente acontece quando as fotos estouram a cota do navegador.
-    throw new Error('Não foi possível salvar: o armazenamento do navegador está cheio. Tente fotos menores ou em menor quantidade.', { cause: err })
-  }
+function set(patch: Partial<Data>) {
+  data = { ...data, ...patch }
   listeners.forEach((l) => l())
 }
-
-window.addEventListener('storage', (e) => {
-  if (e.key === KEY) {
-    data = load()
-    listeners.forEach((l) => l())
-  }
-})
-
 function subscribe(l: () => void) {
   listeners.add(l)
   return () => listeners.delete(l)
 }
 
+/** Lê um pedaço do cache. O seletor deve devolver algo já existente (sem criar arrays novos). */
 export function useDB<T>(select: (d: Data) => T): T {
   return useSyncExternalStore(subscribe, () => select(data))
 }
 
+export const useCurrentUser = () => useDB((d) => d.user)
+
 export const uid = () => crypto.randomUUID().replace(/-/g, '').slice(0, 12)
 
-/* ---------- senhas ---------- */
+/* ---------- http ---------- */
 
-async function hash(password: string, salt: string) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(salt + ':' + password))
-  return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('')
+async function api<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
+  let res: Response
+  try {
+    res = await fetch(`/api${path}`, {
+      method: init?.method ?? 'GET',
+      credentials: 'same-origin',
+      headers: init?.body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
+    })
+  } catch {
+    throw new Error('Sem conexão com o servidor. Verifique a internet e tente de novo.')
+  }
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || 'Algo deu errado. Tente de novo.')
+  return json as T
+}
+
+/* ---------- carga ---------- */
+
+export async function refresh() {
+  try {
+    const b = await api<{ pieces: Piece[]; store: StoreInfo; user: User | null; hasUsers: boolean }>('/bootstrap')
+    set({ ...b, ready: true, offline: false, ...(b.user ? {} : { myReservations: [], allReservations: [] }) })
+    if (b.user) await loadReservations(false)
+  } catch {
+    set({ ready: true, offline: true })
+  }
+}
+
+export async function loadReservations(all: boolean) {
+  const { reservations } = await api<{ reservations: Reservation[] }>(`/reservas${all ? '?todas=1' : ''}`)
+  set(all ? { allReservations: reservations } : { myReservations: reservations })
 }
 
 /* ---------- autenticação ---------- */
 
 export async function register(input: { name: string; email: string; phone: string; password: string }) {
-  const email = input.email.trim().toLowerCase()
-  if (data.users.some((u) => u.email === email)) throw new Error('Já existe uma conta com este e-mail.')
-  if (input.password.length < 6) throw new Error('A senha precisa ter pelo menos 6 caracteres.')
-  const salt = uid()
-  const user: User = {
-    id: uid(),
-    name: input.name.trim(),
-    email,
-    phone: input.phone.trim(),
-    salt,
-    passwordHash: await hash(input.password, salt),
-    // A primeira conta criada administra a loja.
-    role: data.users.length === 0 ? 'admin' : 'cliente',
-    createdAt: Date.now(),
-  }
-  commit({ ...data, users: [...data.users, user], session: user.id })
-  return user
+  await api('/cadastro', { method: 'POST', body: input })
+  await refresh()
 }
 
-export async function login(emailRaw: string, password: string) {
-  const email = emailRaw.trim().toLowerCase()
-  const user = data.users.find((u) => u.email === email)
-  if (!user || (await hash(password, user.salt)) !== user.passwordHash) throw new Error('E-mail ou senha incorretos.')
-  commit({ ...data, session: user.id })
-  return user
+export async function login(email: string, password: string) {
+  await api('/entrar', { method: 'POST', body: { email, password } })
+  await refresh()
 }
 
-export function logout() {
-  commit({ ...data, session: null })
+export async function logout() {
+  await api('/sair', { method: 'POST' })
+  await refresh()
 }
-
-export function useCurrentUser() {
-  return useDB((d) => d.users.find((u) => u.id === d.session) ?? null)
-}
-
-export const hasAnyUser = () => data.users.length > 0
 
 /* ---------- peças ---------- */
 
-export function savePiece(piece: Piece) {
-  const exists = data.pieces.some((p) => p.id === piece.id)
-  commit({
-    ...data,
-    pieces: exists ? data.pieces.map((p) => (p.id === piece.id ? piece : p)) : [piece, ...data.pieces],
-  })
+export async function savePiece(piece: Piece) {
+  await api(`/pecas/${encodeURIComponent(piece.id)}`, { method: 'PUT', body: piece })
+  await refresh()
 }
 
-export function deletePiece(id: string) {
-  commit({
-    ...data,
-    pieces: data.pieces.filter((p) => p.id !== id),
-    reservations: data.reservations.map((r) =>
-      r.pieceId === id && r.status === 'ativa' ? { ...r, status: 'cancelada', closedAt: Date.now() } : r,
-    ),
-  })
+export async function deletePiece(id: string) {
+  await api(`/pecas/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  await refresh()
 }
 
 /* ---------- reservas (somente retirada) ---------- */
 
-export function reserve(pieceId: string, userId: string) {
-  const piece = data.pieces.find((p) => p.id === pieceId)
-  if (!piece || piece.status !== 'disponivel') throw new Error('Esta peça não está mais disponível.')
-  const r: Reservation = { id: uid(), pieceId, userId, status: 'ativa', createdAt: Date.now() }
-  commit({
-    ...data,
-    pieces: data.pieces.map((p) => (p.id === pieceId ? { ...p, status: 'reservada' } : p)),
-    reservations: [r, ...data.reservations],
-  })
-  return r
+export async function reserve(pieceId: string) {
+  try {
+    await api('/reservas', { method: 'POST', body: { pieceId } })
+  } finally {
+    // Atualiza mesmo em caso de erro: a peça pode ter sido reservada por outra pessoa.
+    await refresh()
+  }
 }
 
-export function closeReservation(id: string, status: 'retirada' | 'cancelada') {
-  const r = data.reservations.find((x) => x.id === id)
-  if (!r || r.status !== 'ativa') return
-  commit({
-    ...data,
-    reservations: data.reservations.map((x) => (x.id === id ? { ...x, status, closedAt: Date.now() } : x)),
-    pieces: data.pieces.map((p) =>
-      p.id === r.pieceId ? { ...p, status: status === 'retirada' ? 'retirada' : 'disponivel' } : p,
-    ),
-  })
+export async function closeReservation(id: string, status: 'retirada' | 'cancelada') {
+  await api(`/reservas/${encodeURIComponent(id)}/fechar`, { method: 'POST', body: { status } })
+  await refresh()
+  if (data.user?.role === 'admin') await loadReservations(true)
 }
 
 /* ---------- loja ---------- */
 
-export function saveStore(store: StoreInfo) {
-  commit({ ...data, store })
+export async function saveStore(store: StoreInfo) {
+  const res = await api<{ store: StoreInfo }>('/loja', { method: 'PUT', body: store })
+  set({ store: res.store })
 }
 
 export function holdDeadline(r: Reservation, store: StoreInfo) {

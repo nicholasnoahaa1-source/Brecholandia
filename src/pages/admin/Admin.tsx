@@ -1,8 +1,8 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PieceVisual, lot } from '../../components/bits'
-import { brl, closeReservation, deletePiece, holdDeadline, saveStore, shortDate, useDB, type StoreInfo } from '../../lib/db'
+import { brl, closeReservation, deletePiece, holdDeadline, loadReservations, saveStore, shortDate, useDB, type StoreInfo } from '../../lib/db'
 import { ease, spring } from '../../lib/motion'
 
 const TABS = [
@@ -14,7 +14,11 @@ const TABS = [
 export default function Admin() {
   const [params, setParams] = useSearchParams()
   const tab = (params.get('aba') as (typeof TABS)[number]['id']) || 'pecas'
-  const activeRes = useDB((d) => d.reservations).filter((r) => r.status === 'ativa').length
+  const activeRes = useDB((d) => d.allReservations).filter((r) => r.status === 'ativa').length
+
+  useEffect(() => {
+    loadReservations(true).catch(() => {})
+  }, [])
 
   return (
     <div className="wrap admin">
@@ -57,6 +61,14 @@ function PiecesTab() {
   const pieces = useDB((d) => d.pieces)
   const [filter, setFilter] = useState<'todas' | keyof typeof PSTATUS>('todas')
   const list = useMemo(() => pieces.filter((p) => filter === 'todas' || p.status === filter), [pieces, filter])
+  const remove = async (id: string, title: string) => {
+    if (!confirm(`Excluir “${title}”? Reservas ativas desta peça serão canceladas.`)) return
+    try {
+      await deletePiece(id)
+    } catch (e) {
+      alert((e as Error).message)
+    }
+  }
 
   if (!pieces.length)
     return (
@@ -98,7 +110,7 @@ function PiecesTab() {
                 </Link>
                 <button
                   className="link-btn danger"
-                  onClick={() => confirm(`Excluir “${p.title}”? Reservas ativas desta peça serão canceladas.`) && deletePiece(p.id)}
+                  onClick={() => remove(p.id, p.title)}
                 >
                   Excluir
                 </button>
@@ -112,10 +124,20 @@ function PiecesTab() {
 }
 
 function ReservationsTab() {
-  const reservations = useDB((d) => d.reservations)
-  const pieces = useDB((d) => d.pieces)
-  const users = useDB((d) => d.users)
+  const reservations = useDB((d) => d.allReservations)
   const store = useDB((d) => d.store)
+  const [busy, setBusy] = useState('')
+  const close = async (id: string, status: 'retirada' | 'cancelada') => {
+    if (status === 'cancelada' && !confirm('Cancelar a reserva? A peça volta ao catálogo.')) return
+    setBusy(id)
+    try {
+      await closeReservation(id, status)
+    } catch (e) {
+      alert((e as Error).message)
+    } finally {
+      setBusy('')
+    }
+  }
   const active = reservations.filter((r) => r.status === 'ativa')
   const past = reservations.filter((r) => r.status !== 'ativa')
 
@@ -127,8 +149,8 @@ function ReservationsTab() {
         <ul className="admin-list">
           <AnimatePresence initial={false}>
             {active.map((r) => {
-              const p = pieces.find((x) => x.id === r.pieceId)
-              const u = users.find((x) => x.id === r.userId)
+              const p = r.piece
+              const u = r.customer
               const dl = holdDeadline(r, store)
               const late = dl && dl.getTime() < Date.now()
               return (
@@ -151,10 +173,10 @@ function ReservationsTab() {
                   </div>
                   <span className="admin-price">{p && brl(p.price)}</span>
                   <div className="admin-actions">
-                    <button className="btn btn-sm" onClick={() => closeReservation(r.id, 'retirada')}>
+                    <button className="btn btn-sm" disabled={busy === r.id} onClick={() => close(r.id, 'retirada')}>
                       Marcar retirada
                     </button>
-                    <button className="link-btn danger" onClick={() => confirm('Cancelar a reserva? A peça volta ao catálogo.') && closeReservation(r.id, 'cancelada')}>
+                    <button className="link-btn danger" disabled={busy === r.id} onClick={() => close(r.id, 'cancelada')}>
                       Cancelar
                     </button>
                   </div>
@@ -181,8 +203,8 @@ function ReservationsTab() {
               <tbody>
                 {past.map((r) => (
                   <tr key={r.id}>
-                    <td>{pieces.find((p) => p.id === r.pieceId)?.title ?? 'Peça removida'}</td>
-                    <td>{users.find((u) => u.id === r.userId)?.name ?? '—'}</td>
+                    <td>{r.piece?.title ?? 'Peça removida'}</td>
+                    <td>{r.customer?.name ?? '—'}</td>
                     <td className="mono">{shortDate(r.closedAt ?? r.createdAt)}</td>
                     <td>{r.status === 'retirada' ? 'Retirada' : 'Cancelada'}</td>
                   </tr>
@@ -199,6 +221,7 @@ function ReservationsTab() {
 function StoreTab() {
   const store = useDB((d) => d.store)
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
 
   const fields: { k: keyof StoreInfo; label: string; hint: string; area?: boolean }[] = [
     { k: 'address', label: 'Endereço de retirada', hint: 'Rua, número, bairro, cidade', area: true },
@@ -209,13 +232,18 @@ function StoreTab() {
     { k: 'notes', label: 'Observações', hint: 'Qualquer regra extra da retirada', area: true },
   ]
 
-  const submit = (e: FormEvent<HTMLFormElement>) => {
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     const next = Object.fromEntries(fields.map(({ k }) => [k, String(f.get(k) ?? '').trim()])) as StoreInfo
-    saveStore(next)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2200)
+    setError('')
+    try {
+      await saveStore(next)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2200)
+    } catch (err) {
+      setError((err as Error).message)
+    }
   }
 
   return (
@@ -234,6 +262,7 @@ function StoreTab() {
           <small>{f.hint}</small>
         </label>
       ))}
+      {error && <p className="error" role="alert">{error}</p>}
       <div className="confirm-row">
         <motion.button className="btn" whileTap={{ scale: 0.97 }} transition={spring}>
           Salvar

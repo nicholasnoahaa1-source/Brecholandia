@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { useMemo } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { PieceVisual, lot } from '../components/bits'
 import { brl, closeReservation, holdDeadline, logout, shortDate, useCurrentUser, useDB } from '../lib/db'
@@ -9,12 +9,20 @@ const STATUS = { ativa: 'Aguardando retirada', retirada: 'Retirada', cancelada: 
 
 export default function Account() {
   const user = useCurrentUser()!
-  const all = useDB((d) => d.reservations)
-  const pieces = useDB((d) => d.pieces)
+  const mine = useDB((d) => d.myReservations)
   const store = useDB((d) => d.store)
   const navigate = useNavigate()
+  const [error, setError] = useState('')
 
-  const mine = useMemo(() => all.filter((r) => r.userId === user.id), [all, user.id])
+  const cancel = async (id: string) => {
+    if (!confirm('Cancelar esta reserva? A peça volta ao catálogo.')) return
+    setError('')
+    try {
+      await closeReservation(id, 'cancelada')
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
   const active = mine.filter((r) => r.status === 'ativa')
   const past = mine.filter((r) => r.status !== 'ativa')
 
@@ -30,8 +38,8 @@ export default function Account() {
         </div>
         <button
           className="btn btn-line"
-          onClick={() => {
-            logout()
+          onClick={async () => {
+            await logout().catch(() => {})
             navigate('/')
           }}
         >
@@ -50,6 +58,8 @@ export default function Account() {
         </div>
       )}
 
+      {error && <p className="error" role="alert">{error}</p>}
+
       <h2 className="section-title">
         Reservas ativas <span className="mono">{active.length}</span>
       </h2>
@@ -61,7 +71,7 @@ export default function Account() {
         <motion.ul className="res-list" variants={stagger} initial="hidden" animate="show">
           <AnimatePresence>
             {active.map((r) => {
-              const p = pieces.find((x) => x.id === r.pieceId)
+              const p = r.piece
               const dl = holdDeadline(r, store)
               return (
                 <motion.li key={r.id} variants={rise} layout exit={{ opacity: 0, x: -20 }} className="res">
@@ -81,7 +91,7 @@ export default function Account() {
                       {dl && ` · retirar até ${shortDate(dl)}`}
                     </span>
                   </div>
-                  <button className="link-btn" onClick={() => confirm('Cancelar esta reserva? A peça volta ao catálogo.') && closeReservation(r.id, 'cancelada')}>
+                  <button className="link-btn" onClick={() => cancel(r.id)}>
                     Cancelar
                   </button>
                 </motion.li>
@@ -104,7 +114,7 @@ export default function Account() {
             </thead>
             <tbody>
               {past.map((r) => {
-                const p = pieces.find((x) => x.id === r.pieceId)
+                const p = r.piece
                 return (
                   <tr key={r.id}>
                     <td>{p?.title ?? 'Peça removida'}</td>

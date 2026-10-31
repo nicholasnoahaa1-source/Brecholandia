@@ -1760,3 +1760,15 @@ button {
     scroll-behavior: auto !important;
   }
 }
+
+.loading {
+  padding-top: 64px;
+  color: var(--muted);
+}
+.offline {
+  margin: 0;
+  background: var(--danger);
+  color: var(--ink);
+  padding: 8px var(--gutter);
+  font-weight: 600;
+}

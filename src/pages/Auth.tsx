@@ -1,16 +1,17 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { hasAnyUser, login, register } from '../lib/db'
+import { login, register, useDB } from '../lib/db'
 import { ease, spring } from '../lib/motion'
 
 export default function Auth() {
-  const [mode, setMode] = useState<'entrar' | 'criar'>(hasAnyUser() ? 'entrar' : 'criar')
+  const hasUsers = useDB((d) => d.hasUsers)
+  const [mode, setMode] = useState<'entrar' | 'criar'>(hasUsers ? 'entrar' : 'criar')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [params] = useSearchParams()
   const navigate = useNavigate()
-  const first = !hasAnyUser()
+  const first = !hasUsers
 
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()

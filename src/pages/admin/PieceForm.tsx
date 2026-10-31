@@ -20,6 +20,7 @@ export default function PieceForm() {
   const [condition, setCondition] = useState<Condition>(existing?.condition ?? 'otimo')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   if (!isNew && !existing)
     return (
@@ -46,7 +47,7 @@ export default function PieceForm() {
     }
   }
 
-  const submit = (e: FormEvent<HTMLFormElement>) => {
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     const val = (k: string) => String(f.get(k) ?? '').trim()
@@ -71,11 +72,15 @@ export default function PieceForm() {
       status: existing?.status ?? 'disponivel',
       createdAt: existing?.createdAt ?? Date.now(),
     }
+    setSaving(true)
+    setError('')
     try {
-      savePiece(piece)
+      await savePiece(piece)
       navigate('/admin')
     } catch (err) {
       setError((err as Error).message)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -222,8 +227,8 @@ export default function PieceForm() {
           )}
 
           <div className="confirm-row">
-            <motion.button className="btn" whileTap={{ scale: 0.97 }} transition={spring} disabled={loading}>
-              {isNew ? 'Publicar no catálogo' : 'Salvar alterações'}
+            <motion.button className="btn" whileTap={{ scale: 0.97 }} transition={spring} disabled={loading || saving}>
+              {saving ? 'Salvando…' : isNew ? 'Publicar no catálogo' : 'Salvar alterações'}
             </motion.button>
             <Link to="/admin" className="link-btn">
               Cancelar
