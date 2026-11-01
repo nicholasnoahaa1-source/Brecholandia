@@ -9,9 +9,10 @@ export default function Auth() {
   const [mode, setMode] = useState<'entrar' | 'criar'>(hasUsers ? 'entrar' : 'criar')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  // Aparece só quando alguém tenta criar conta com o e-mail reservado da loja.
+  const [needsCode, setNeedsCode] = useState(false)
   const [params] = useSearchParams()
   const navigate = useNavigate()
-  const first = !hasUsers
 
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -23,10 +24,17 @@ export default function Auth() {
       if (mode === 'entrar') await login(val('email'), val('senha'))
       else {
         if (val('senha') !== val('senha2')) throw new Error('As senhas não conferem.')
-        await register({ name: val('nome'), email: val('email'), phone: val('telefone'), password: val('senha') })
+        await register({
+          name: val('nome'),
+          email: val('email'),
+          phone: val('telefone'),
+          password: val('senha'),
+          ...(needsCode ? { adminCode: val('codigo') } : {}),
+        })
       }
       navigate(params.get('volta') || '/catalogo', { replace: true })
     } catch (err) {
+      if ((err as { code?: string }).code === 'codigo_loja') setNeedsCode(true)
       setError((err as Error).message)
     } finally {
       setBusy(false)
@@ -41,13 +49,6 @@ export default function Auth() {
         <p className="auth-note">
           A conta serve para reservar peças. Cada peça reservada fica separada no seu nome até você retirar na loja.
         </p>
-        {first && (
-          <p className="auth-first">
-            <span className="mono">Primeiro acesso</span>
-            Ainda não existe nenhuma conta. A primeira conta criada será a administradora da loja, com acesso ao cadastro de
-            peças e às reservas.
-          </p>
-        )}
       </div>
 
       <div className="auth-form-wrap">
@@ -61,6 +62,7 @@ export default function Auth() {
               onClick={() => {
                 setMode(m)
                 setError('')
+                setNeedsCode(false)
               }}
             >
               {m === 'entrar' ? 'Já tenho conta' : 'Sou novo por aqui'}
@@ -95,6 +97,11 @@ export default function Auth() {
               required
             />
             {mode === 'criar' && <Field label="Repita a senha" name="senha2" type="password" autoComplete="new-password" required />}
+            {mode === 'criar' && needsCode && (
+              <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0, transition: { duration: 0.25, ease } }}>
+                <Field label="Código da loja" name="codigo" type="password" autoComplete="off" hint="Definido pela loja na configuração do servidor." required />
+              </motion.div>
+            )}
 
             <AnimatePresence>
               {error && (

@@ -7,7 +7,7 @@ let server
 let base
 
 before(async () => {
-  server = createApp(fakeDb()).listen(0)
+  server = createApp(fakeDb(), { adminEmails: ['loja@x.com'], adminCode: 'codigo-da-loja' }).listen(0)
   await new Promise((r) => server.once('listening', r))
   base = `http://127.0.0.1:${server.address().port}/api`
 })
@@ -50,19 +50,28 @@ const piece = {
   photos: [PIXEL],
 }
 
-test('primeira conta vira administradora; as seguintes são clientes', async () => {
+test('só o e-mail da loja administra, e criar essa conta exige o código', async () => {
   let r = await anon('/bootstrap')
-  assert.equal(r.body.hasUsers, false)
   assert.equal(r.body.user, null)
 
-  r = await admin('/cadastro', { method: 'POST', body: { name: 'Loja', email: 'LOJA@x.com', phone: '1', password: 'segredo1' } })
+  // A primeira conta criada não vira administradora.
+  r = await ana('/cadastro', { method: 'POST', body: { name: 'Ana', email: 'ana@x.com', phone: '2', password: 'segredo2' } })
+  assert.equal(r.status, 201)
+  assert.equal(r.body.user.role, 'cliente')
+
+  // Ninguém se cadastra com o e-mail da loja sem o código.
+  const intruso = client()
+  r = await intruso('/cadastro', { method: 'POST', body: { name: 'X', email: 'loja@x.com', phone: '1', password: 'segredo1' } })
+  assert.equal(r.status, 403)
+  assert.equal(r.body.code, 'codigo_loja')
+  r = await intruso('/cadastro', { method: 'POST', body: { name: 'X', email: 'loja@x.com', phone: '1', password: 'segredo1', adminCode: 'chute' } })
+  assert.equal(r.status, 403)
+
+  r = await admin('/cadastro', { method: 'POST', body: { name: 'Loja', email: 'LOJA@x.com', phone: '1', password: 'segredo1', adminCode: 'codigo-da-loja' } })
   assert.equal(r.status, 201)
   assert.equal(r.body.user.role, 'admin')
   assert.equal(r.body.user.email, 'loja@x.com')
   assert.equal(r.body.user.passwordHash, undefined)
-
-  r = await ana('/cadastro', { method: 'POST', body: { name: 'Ana', email: 'ana@x.com', phone: '2', password: 'segredo2' } })
-  assert.equal(r.body.user.role, 'cliente')
   await bia('/cadastro', { method: 'POST', body: { name: 'Bia', email: 'bia@x.com', phone: '3', password: 'segredo3' } })
 
   r = await anon('/cadastro', { method: 'POST', body: { name: 'X', email: 'ana@x.com', phone: '2', password: 'segredo2' } })
@@ -151,4 +160,35 @@ test('excluir peça apaga as fotos e cancela reserva ativa', async () => {
   const r = (await ana('/reservas')).body.reservations.find((x) => x.pieceId === 'p2')
   assert.equal(r.status, 'cancelada')
   assert.equal(r.piece.title, 'Saia')
+})
+
+test('sem ADMIN_CODE configurado, ninguém cria a conta da loja', async () => {
+  const srv = createApp(fakeDb(), { adminEmails: ['loja@x.com'] }).listen(0)
+  await new Promise((r) => srv.once('listening', r))
+  const res = await fetch(`http://127.0.0.1:${srv.address().port}/api/cadastro`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'X', email: 'loja@x.com', phone: '1', password: 'segredo1', adminCode: '' }),
+  })
+  assert.equal(res.status, 403)
+  srv.close()
+})
+
+test('papel salvo no banco não vale: conta antiga marcada como admin vira cliente', async () => {
+  const db = fakeDb()
+  const srv = createApp(db, { adminEmails: ['loja@x.com'], adminCode: 'c' }).listen(0)
+  await new Promise((r) => srv.once('listening', r))
+  const url = `http://127.0.0.1:${srv.address().port}/api`
+  let res = await fetch(`${url}/cadastro`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Velha', email: 'velha@x.com', phone: '1', password: 'segredo1' }),
+  })
+  const cookie = res.headers.get('set-cookie').split(';')[0]
+  await db.collection('users').updateOne({ email: 'velha@x.com' }, { $set: { role: 'admin' } })
+  res = await fetch(`${url}/bootstrap`, { headers: { Cookie: cookie } })
+  assert.equal((await res.json()).user.role, 'cliente')
+  res = await fetch(`${url}/loja`, { method: 'PUT', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: '{}' })
+  assert.equal(res.status, 403)
+  srv.close()
 })

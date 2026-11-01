@@ -109,7 +109,7 @@ async function api<T>(path: string, init?: { method?: string; body?: unknown }):
     throw new Error('Sem conexão com o servidor. Verifique a internet e tente de novo.')
   }
   const json = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(json.error || 'Algo deu errado. Tente de novo.')
+  if (!res.ok) throw Object.assign(new Error(json.error || 'Algo deu errado. Tente de novo.'), { code: json.code as string | undefined })
   return json as T
 }
 
@@ -132,7 +132,7 @@ export async function loadReservations(all: boolean) {
 
 /* ---------- autenticação ---------- */
 
-export async function register(input: { name: string; email: string; phone: string; password: string }) {
+export async function register(input: { name: string; email: string; phone: string; password: string; adminCode?: string }) {
   await api('/cadastro', { method: 'POST', body: input })
   await refresh()
 }

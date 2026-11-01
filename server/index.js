@@ -6,13 +6,14 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createApp } from './app.js'
 import { getDb } from './db.js'
+import { appConfig } from './config.js'
 
 const { client, db } = await getDb().catch((err) => {
   console.error(err.message)
   process.exit(1)
 })
 
-const app = createApp(db, { secureCookies: process.env.NODE_ENV === 'production' })
+const app = createApp(db, { secureCookies: process.env.NODE_ENV === 'production', ...appConfig() })
 
 // Em produção, o mesmo servidor entrega o site já compilado (pasta dist/).
 const dist = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist')

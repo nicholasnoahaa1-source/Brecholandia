@@ -1,4 +1,5 @@
 import express from 'express'
+import { timingSafeEqual } from 'node:crypto'
 import { Binary } from 'mongodb'
 import { attemptLimiter, hashPassword, newId, readCookie, SESSION_DAYS, sessionCookie, verifyPassword } from './auth.js'
 
@@ -8,9 +9,10 @@ const MAX_PHOTOS = 6
 const MAX_PHOTO_BYTES = 2 * 1024 * 1024
 
 class HttpError extends Error {
-  constructor(status, message) {
+  constructor(status, message, code) {
     super(message)
     this.status = status
+    this.code = code
   }
 }
 
@@ -26,7 +28,16 @@ const resOut = ({ _id, ...r }) => ({ id: _id, ...r })
  * Cria a API. Recebe o banco já conectado para poder ser testada isoladamente.
  * Coleções: users, sessions, pieces, photos, reservations, config.
  */
-export function createApp(db, { secureCookies = false } = {}) {
+export function createApp(db, { secureCookies = false, adminEmails = [], adminCode = '' } = {}) {
+  const admins = new Set(adminEmails.map((e) => e.toLowerCase()))
+  // O papel vem sempre da lista de e-mails, nunca do que está salvo no banco.
+  const roleFor = (email) => (admins.has(email) ? 'admin' : 'cliente')
+  const codeMatches = (given) => {
+    if (!adminCode || typeof given !== 'string') return false
+    const a = Buffer.from(given.trim()), b = Buffer.from(adminCode)
+    return a.length === b.length && timingSafeEqual(a, b)
+  }
+
   const users = db.collection('users')
   const sessions = db.collection('sessions')
   const pieces = db.collection('pieces')
@@ -47,6 +58,7 @@ export function createApp(db, { secureCookies = false } = {}) {
     if (sid) {
       const s = await sessions.findOne({ _id: sid })
       if (s && s.expiresAt > new Date()) req.user = await users.findOne({ _id: s.userId })
+      if (req.user) req.user.role = roleFor(req.user.email)
     }
     next()
   })
@@ -98,15 +110,20 @@ export function createApp(db, { secureCookies = false } = {}) {
     if (password.length < 6) throw new HttpError(400, 'A senha precisa ter pelo menos 6 caracteres.')
     if (await users.findOne({ email })) throw new HttpError(409, 'Já existe uma conta com este e-mail.')
 
-    // A primeira conta criada administra a loja.
-    const isFirst = (await users.countDocuments({}, { limit: 1 })) === 0
+    // E-mail da administração é reservado: só cria a conta quem tem o código da loja.
+    if (roleFor(email) === 'admin' && !codeMatches(req.body?.adminCode)) {
+      if (req.body?.adminCode) limiter.fail(req.ip ?? 'desconhecido')
+      if (limiter.blocked(req.ip ?? 'desconhecido')) throw new HttpError(429, 'Muitas tentativas. Aguarde alguns minutos e tente de novo.')
+      if (!adminCode) throw new HttpError(403, 'Este e-mail é reservado à loja. Defina ADMIN_CODE no servidor para criar a conta.')
+      throw new HttpError(403, req.body?.adminCode ? 'Código da loja incorreto.' : 'Este e-mail é reservado à loja. Informe o código da loja.', 'codigo_loja')
+    }
     const user = {
       _id: newId(),
       name,
       email,
       phone,
       passwordHash: await hashPassword(password),
-      role: isFirst ? 'admin' : 'cliente',
+      role: roleFor(email),
       createdAt: Date.now(),
     }
     try {
@@ -130,6 +147,7 @@ export function createApp(db, { secureCookies = false } = {}) {
       throw new HttpError(401, 'E-mail ou senha incorretos.')
     }
     limiter.reset(key)
+    user.role = roleFor(user.email)
     await startSession(res, user._id)
     res.json({ user: publicUser(user) })
   })
@@ -302,7 +320,7 @@ export function createApp(db, { secureCookies = false } = {}) {
     if (err?.type === 'entity.too.large') return res.status(413).json({ error: 'Envio grande demais. Use fotos menores.' })
     const status = err instanceof HttpError ? err.status : 500
     if (status === 500) console.error(err)
-    res.status(status).json({ error: status === 500 ? 'Erro no servidor. Tente de novo.' : err.message })
+    res.status(status).json({ error: status === 500 ? 'Erro no servidor. Tente de novo.' : err.message, ...(err?.code && status !== 500 ? { code: err.code } : {}) })
   })
 
   return app

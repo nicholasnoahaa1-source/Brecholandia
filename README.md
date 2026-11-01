@@ -26,7 +26,7 @@ npm run dev      # site com recarregamento; /api é repassado para a porta 3001
 O projeto já vem configurado (`vercel.json`): o site é gerado pelo Vite e a API roda como função em `api/index.js`.
 
 1. Importe o repositório na Vercel (*Add New → Project*).
-2. Em *Settings → Environment Variables*, crie `MONGODB_URI` com a string de conexão do Atlas (e `MONGODB_DB` se quiser outro nome de banco).
+2. Em *Settings → Environment Variables*, crie `MONGODB_URI` com a string de conexão do Atlas e `ADMIN_CODE` com o código da loja (veja *Quem administra*).
 3. No Atlas, em *Network Access*, libere `0.0.0.0/0`. As funções da Vercel não têm IP fixo, então essa é a forma indicada pelo próprio MongoDB; a proteção fica por conta do usuário e da senha do banco.
 4. Faça o deploy.
 
@@ -55,11 +55,18 @@ Testam a API (cadastro, login, permissões, reserva exclusiva, retirada, cancela
 - **Somente retirada:** a reserva é atômica no banco (duas pessoas não reservam a mesma peça). A peça fica no nome do cliente até a loja marcar “Retirada” ou alguém cancelar.
 - **Gerenciar** (só administração): peças com até 6 fotos (guardadas no MongoDB), reservas com nome e telefone do cliente, dados da loja.
 
-## Primeiro acesso
+## Quem administra
 
-1. Abra o site e vá em **Entrar**. A **primeira conta criada vira administradora**.
-2. Em **Gerenciar → Dados da loja**, preencha endereço, horário, prazo, pagamento e contato. Nada vem preenchido: só aparece no site o que você escrever.
-3. Em **+ Nova peça**, cadastre as peças.
+Só a conta **nicholasnoahaa3@gmail.com** vê a área **Gerenciar** (peças, reservas e dados da loja). O papel é calculado pelo e-mail a cada acesso, então nenhuma outra conta vira administradora, nem mexendo no banco.
+
+Como o site não confirma e-mail, esse endereço é **reservado**: para criar a conta com ele é preciso o código da loja, definido na variável `ADMIN_CODE`. Sem essa variável, ninguém consegue criar a conta da loja.
+
+1. Na Vercel, em *Settings → Environment Variables*, crie `ADMIN_CODE` com um código só seu (uma frase longa serve).
+2. Faça o deploy, abra o site e vá em **Entrar → Sou novo por aqui** com o e-mail da loja.
+3. O site pede o **Código da loja**. Digite o mesmo valor do `ADMIN_CODE`.
+4. Em **Gerenciar → Dados da loja**, preencha endereço, horário, prazo, pagamento e contato. Nada vem preenchido: só aparece no site o que você escrever.
+
+Para trocar ou acrescentar administradores, defina `ADMIN_EMAILS` (vários separados por vírgula).
 
 ## Coleções no MongoDB
 

@@ -1,12 +1,13 @@
 // Função da Vercel: todas as rotas /api/* chegam aqui (veja vercel.json).
 import { createApp } from '../server/app.js'
 import { getDb } from '../server/db.js'
+import { appConfig } from '../server/config.js'
 
 let app
 
 export default async function handler(req, res) {
   try {
-    if (!app) app = createApp((await getDb()).db, { secureCookies: true })
+    if (!app) app = createApp((await getDb()).db, { secureCookies: true, ...appConfig() })
   } catch (err) {
     console.error(err)
     res.statusCode = 503
