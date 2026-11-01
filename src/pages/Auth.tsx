@@ -91,6 +91,7 @@ export default function Auth() {
               type="password"
               autoComplete={mode === 'entrar' ? 'current-password' : 'new-password'}
               minLength={mode === 'criar' ? 6 : undefined}
+              hint={mode === 'criar' ? 'Pelo menos 6 caracteres.' : undefined}
               required
             />
             {mode === 'criar' && <Field label="Repita a senha" name="senha2" type="password" autoComplete="new-password" required />}
@@ -113,11 +114,24 @@ export default function Auth() {
   )
 }
 
-function Field({ label, ...rest }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
+function Field({ label, hint, type, ...rest }: { label: string; hint?: string } & React.InputHTMLAttributes<HTMLInputElement>) {
+  const [show, setShow] = useState(false)
+  const isPassword = type === 'password'
+  const hintId = hint ? `${rest.name}-dica` : undefined
   return (
-    <label className="field">
-      <span className="mono">{label}</span>
-      <input {...rest} />
-    </label>
+    <div className="field">
+      <label className="mono" htmlFor={rest.name}>
+        {label}
+      </label>
+      <div className={isPassword ? 'field-row' : undefined}>
+        <input id={rest.name} type={isPassword && show ? 'text' : type} aria-describedby={hintId} {...rest} />
+        {isPassword && (
+          <button type="button" className="field-toggle mono" aria-pressed={show} onClick={() => setShow((s) => !s)}>
+            {show ? 'Ocultar' : 'Mostrar'}
+          </button>
+        )}
+      </div>
+      {hint && <small id={hintId}>{hint}</small>}
+    </div>
   )
 }

@@ -8,6 +8,7 @@ import { CATEGORIES } from '../lib/taxonomy'
 
 export default function Home() {
   const pieces = useDB((d) => d.pieces)
+  const ready = useDB((d) => d.ready)
   const user = useCurrentUser()
   const heroRef = useRef<HTMLElement>(null)
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] })
@@ -83,7 +84,7 @@ export default function Home() {
                   <Link to={`/catalogo?cat=${encodeURIComponent(c)}`} className="cat-link">
                     <motion.span className="cat-fill" aria-hidden initial={{ scaleX: 0 }} whileHover={{ scaleX: 1 }} transition={{ duration: 0.35, ease }} />
                     <span className="cat-name">{c}</span>
-                    <span className="mono cat-n">{n === 1 ? '1 peça' : `${n} peças`}</span>
+                    <span className="mono cat-n">{!ready ? '' : n === 1 ? '1 peça' : `${n} peças`}</span>
                     <span className="cat-arrow" aria-hidden>
                       →
                     </span>

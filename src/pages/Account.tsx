@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { PieceVisual, lot } from '../components/bits'
+import { useDialog } from '../components/Dialog'
 import { brl, closeReservation, holdDeadline, logout, shortDate, useCurrentUser, useDB } from '../lib/db'
 import { rise, stagger } from '../lib/motion'
 
@@ -13,12 +14,21 @@ export default function Account() {
   const store = useDB((d) => d.store)
   const navigate = useNavigate()
   const [error, setError] = useState('')
+  const dialog = useDialog()
 
-  const cancel = async (id: string) => {
-    if (!confirm('Cancelar esta reserva? A peça volta ao catálogo.')) return
+  const cancel = async (id: string, title?: string) => {
+    const ok = await dialog.confirm({
+      title: 'Cancelar esta reserva?',
+      body: `${title ? `“${title}” ` : 'A peça '}volta para o catálogo e outra pessoa pode reservar.`,
+      confirm: 'Cancelar reserva',
+      cancel: 'Manter reserva',
+      danger: true,
+    })
+    if (!ok) return
     setError('')
     try {
       await closeReservation(id, 'cancelada')
+      dialog.toast('Reserva cancelada.')
     } catch (e) {
       setError((e as Error).message)
     }
@@ -91,7 +101,7 @@ export default function Account() {
                       {dl && ` · retirar até ${shortDate(dl)}`}
                     </span>
                   </div>
-                  <button className="link-btn" onClick={() => cancel(r.id)}>
+                  <button className="link-btn" onClick={() => cancel(r.id, p?.title)}>
                     Cancelar
                   </button>
                 </motion.li>

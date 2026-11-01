@@ -1,8 +1,9 @@
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import PieceCard from '../components/PieceCard'
 import { Swatch } from '../components/bits'
+import { useModalFocus } from '../components/Dialog'
 import { useCurrentUser, useDB, type Piece } from '../lib/db'
 import { ease, spring } from '../lib/motion'
 import { CATEGORIES, COLORS, CONDITIONS, PIECE_TYPES } from '../lib/taxonomy'
@@ -20,6 +21,9 @@ export default function Catalog() {
   const user = useCurrentUser()
   const [params, setParams] = useSearchParams()
   const [drawer, setDrawer] = useState(false)
+  const drawerRef = useRef<HTMLDivElement>(null)
+  const ready = useDB((d) => d.ready)
+  useModalFocus(drawer, drawerRef, () => setDrawer(false))
 
   const get = (k: Multi) => params.getAll(k)
   const q = params.get('q') ?? ''
@@ -90,7 +94,7 @@ export default function Catalog() {
       <div className="catalog-head">
         <h1 className="display-l">
           Catálogo
-          <sup className="mono">{String(filtered.length).padStart(3, '0')}</sup>
+          <sup className="mono" aria-hidden>{ready ? String(filtered.length).padStart(3, '0') : '···'}</sup>
         </h1>
         <div className="catalog-tools">
           <label className="search">
@@ -128,8 +132,17 @@ export default function Catalog() {
           )}
         </aside>
 
-        <section aria-live="polite">
-          {visible.length === 0 ? (
+        <section aria-busy={!ready}>
+          <p className="sr-only" role="status">
+            {ready ? `${filtered.length} ${filtered.length === 1 ? 'peça encontrada' : 'peças encontradas'}` : 'Carregando catálogo'}
+          </p>
+          {!ready ? (
+            <div className="grid" aria-hidden>
+              {Array.from({ length: 8 }, (_, i) => (
+                <div key={i} className="card-skeleton" />
+              ))}
+            </div>
+          ) : visible.length === 0 ? (
             <EmptyCatalog admin={user?.role === 'admin'} />
           ) : filtered.length === 0 ? (
             <div className="empty-state small">
@@ -163,6 +176,7 @@ export default function Catalog() {
               onClick={() => setDrawer(false)}
             />
             <motion.div
+              ref={drawerRef}
               className="drawer"
               role="dialog"
               aria-modal="true"
@@ -173,9 +187,14 @@ export default function Catalog() {
             >
               <div className="drawer-head">
                 <span className="display-s">Filtros</span>
-                <button className="link-btn" onClick={clear}>
-                  Limpar
-                </button>
+                <div className="drawer-head-actions">
+                  <button className="link-btn" onClick={clear}>
+                    Limpar
+                  </button>
+                  <button className="link-btn" onClick={() => setDrawer(false)}>
+                    Fechar
+                  </button>
+                </div>
               </div>
               <div className="drawer-body">{filters}</div>
               <button className="btn btn-block" onClick={() => setDrawer(false)}>

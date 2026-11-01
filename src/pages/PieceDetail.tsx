@@ -18,6 +18,25 @@ export default function PieceDetail() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
+  const ready = useDB((d) => d.ready)
+  if (!piece && !ready) {
+    return (
+      <div className="wrap detail" aria-busy="true">
+        <p className="sr-only" role="status">Carregando peça</p>
+        <div className="detail-grid" aria-hidden>
+          <div className="card-skeleton tall" />
+          <div className="skeleton-lines">
+            <span style={{ width: '30%' }} />
+            <span style={{ width: '80%', height: 40 }} />
+            <span style={{ width: '40%', height: 32 }} />
+            <span style={{ width: '100%' }} />
+            <span style={{ width: '100%' }} />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (!piece) {
     return (
       <section className="wrap empty-state">

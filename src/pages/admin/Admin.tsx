@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PieceVisual, lot } from '../../components/bits'
+import { useDialog } from '../../components/Dialog'
 import { brl, closeReservation, deletePiece, holdDeadline, loadReservations, saveStore, shortDate, useDB, type StoreInfo } from '../../lib/db'
 import { ease, spring } from '../../lib/motion'
 
@@ -61,12 +62,20 @@ function PiecesTab() {
   const pieces = useDB((d) => d.pieces)
   const [filter, setFilter] = useState<'todas' | keyof typeof PSTATUS>('todas')
   const list = useMemo(() => pieces.filter((p) => filter === 'todas' || p.status === filter), [pieces, filter])
+  const dialog = useDialog()
   const remove = async (id: string, title: string) => {
-    if (!confirm(`Excluir “${title}”? Reservas ativas desta peça serão canceladas.`)) return
+    const ok = await dialog.confirm({
+      title: `Excluir “${title}”?`,
+      body: 'A peça e as fotos saem do catálogo de vez. Se houver reserva ativa, ela é cancelada.',
+      confirm: 'Excluir peça',
+      danger: true,
+    })
+    if (!ok) return
     try {
       await deletePiece(id)
+      dialog.toast('Peça excluída.')
     } catch (e) {
-      alert((e as Error).message)
+      dialog.toast((e as Error).message, 'erro')
     }
   }
 
@@ -127,13 +136,24 @@ function ReservationsTab() {
   const reservations = useDB((d) => d.allReservations)
   const store = useDB((d) => d.store)
   const [busy, setBusy] = useState('')
-  const close = async (id: string, status: 'retirada' | 'cancelada') => {
-    if (status === 'cancelada' && !confirm('Cancelar a reserva? A peça volta ao catálogo.')) return
+  const dialog = useDialog()
+  const close = async (id: string, status: 'retirada' | 'cancelada', title = 'A peça') => {
+    if (status === 'cancelada') {
+      const ok = await dialog.confirm({
+        title: 'Cancelar a reserva?',
+        body: `${title} volta para o catálogo como disponível.`,
+        confirm: 'Cancelar reserva',
+        cancel: 'Manter reserva',
+        danger: true,
+      })
+      if (!ok) return
+    }
     setBusy(id)
     try {
       await closeReservation(id, status)
+      dialog.toast(status === 'retirada' ? 'Marcada como retirada.' : 'Reserva cancelada.')
     } catch (e) {
-      alert((e as Error).message)
+      dialog.toast((e as Error).message, 'erro')
     } finally {
       setBusy('')
     }
@@ -173,10 +193,10 @@ function ReservationsTab() {
                   </div>
                   <span className="admin-price">{p && brl(p.price)}</span>
                   <div className="admin-actions">
-                    <button className="btn btn-sm" disabled={busy === r.id} onClick={() => close(r.id, 'retirada')}>
+                    <button className="btn btn-sm" disabled={busy === r.id} onClick={() => close(r.id, 'retirada', p?.title)}>
                       Marcar retirada
                     </button>
-                    <button className="link-btn danger" disabled={busy === r.id} onClick={() => close(r.id, 'cancelada')}>
+                    <button className="link-btn danger" disabled={busy === r.id} onClick={() => close(r.id, 'cancelada', p?.title ? `“${p.title}”` : undefined)}>
                       Cancelar
                     </button>
                   </div>
