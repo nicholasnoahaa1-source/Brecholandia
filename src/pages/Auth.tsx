@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { login, register, useDB } from '../lib/db'
 import { ease, spring } from '../lib/motion'
+import { useTitle } from '../lib/useTitle'
 
 export default function Auth() {
   const hasUsers = useDB((d) => d.hasUsers)
@@ -13,6 +14,7 @@ export default function Auth() {
   const [needsCode, setNeedsCode] = useState(false)
   const [params] = useSearchParams()
   const navigate = useNavigate()
+  useTitle(mode === 'entrar' ? 'Entrar' : 'Criar conta')
 
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -46,7 +48,7 @@ export default function Auth() {
       <div className="auth-side">
         <h1 className="display-l">{mode === 'entrar' ? 'Entrar' : 'Criar conta'}</h1>
         <p className="auth-note">
-          A conta serve para reservar peças. Cada peça reservada fica separada no seu nome até você retirar na loja.
+          A conta serve para reservar peças. A peça reservada fica no seu nome até ser retirada na loja ou a reserva ser cancelada.
         </p>
       </div>
 

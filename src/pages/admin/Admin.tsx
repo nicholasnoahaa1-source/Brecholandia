@@ -3,8 +3,9 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PieceVisual, lot } from '../../components/bits'
 import { useDialog } from '../../components/Dialog'
-import { brl, closeReservation, deletePiece, holdDeadline, loadReservations, saveStore, shortDate, useDB, type StoreInfo } from '../../lib/db'
+import { brl, closeReservation, deletePiece, holdDeadline, loadReservations, saveStore, setPieceStatus, shortDate, useDB, type StoreInfo } from '../../lib/db'
 import { ease, spring } from '../../lib/motion'
+import { useTitle } from '../../lib/useTitle'
 
 const TABS = [
   { id: 'pecas', label: 'Peças' },
@@ -14,6 +15,7 @@ const TABS = [
 
 export default function Admin() {
   const [params, setParams] = useSearchParams()
+  useTitle('Gerenciar')
   const tab = (params.get('aba') as (typeof TABS)[number]['id']) || 'pecas'
   const activeRes = useDB((d) => d.allReservations).filter((r) => r.status === 'ativa').length
 
@@ -71,6 +73,22 @@ function PiecesTab() {
     )
   }, [pieces, filter, q])
   const dialog = useDialog()
+  const changeStatus = async (id: string, title: string, status: 'retirada' | 'disponivel') => {
+    if (status === 'retirada') {
+      const ok = await dialog.confirm({
+        title: `“${title}” foi vendida no balcão?`,
+        body: 'A peça sai do catálogo. Se precisar, ela pode voltar depois pelo filtro “Retirada”.',
+        confirm: 'Tirar do catálogo',
+      })
+      if (!ok) return
+    }
+    try {
+      await setPieceStatus(id, status)
+      dialog.toast(status === 'retirada' ? 'Peça tirada do catálogo.' : 'Peça de volta ao catálogo.')
+    } catch (e) {
+      dialog.toast((e as Error).message, 'erro')
+    }
+  }
   const remove = async (id: string, title: string) => {
     const ok = await dialog.confirm({
       title: `Excluir “${title}”?`,
@@ -116,7 +134,7 @@ function PiecesTab() {
       <ul className="admin-list">
         <AnimatePresence initial={false}>
           {list.map((p) => (
-            <motion.li key={p.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, x: -24 }} transition={spring}>
+            <motion.li key={p.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.1 } }} transition={spring}>
               <div className="admin-thumb">
                 <PieceVisual piece={p} />
               </div>
@@ -132,6 +150,16 @@ function PiecesTab() {
                 <Link to={`/admin/peca/${p.id}`} className="link-btn">
                   Editar
                 </Link>
+                {p.status === 'disponivel' && (
+                  <button className="link-btn" onClick={() => changeStatus(p.id, p.title, 'retirada')}>
+                    Vendida no balcão
+                  </button>
+                )}
+                {p.status === 'retirada' && (
+                  <button className="link-btn" onClick={() => changeStatus(p.id, p.title, 'disponivel')}>
+                    Voltar ao catálogo
+                  </button>
+                )}
                 <button
                   className="link-btn danger"
                   onClick={() => remove(p.id, p.title)}
@@ -268,7 +296,7 @@ function StoreTab() {
     { k: 'address', label: 'Endereço de retirada', hint: 'Rua, número, bairro, cidade', area: true },
     { k: 'hours', label: 'Horário de retirada', hint: 'Ex.: dias da semana e horários em que a loja atende' },
     { k: 'holdDays', label: 'Prazo para retirar (dias)', hint: 'Quantos dias a peça fica separada. Deixe vazio se não houver prazo.' },
-    { k: 'payment', label: 'Formas de pagamento', hint: 'Como o cliente paga na retirada' },
+    { k: 'payment', label: 'Formas de pagamento', hint: 'Formas de pagamento aceitas. Deixe vazio para não mostrar.' },
     { k: 'contact', label: 'Contato', hint: 'Telefone, WhatsApp ou Instagram da loja' },
     { k: 'notes', label: 'Observações', hint: 'Qualquer regra extra da retirada', area: true },
   ]

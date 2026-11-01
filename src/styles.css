@@ -2051,8 +2051,9 @@ p {
 .toasts {
   position: fixed;
   z-index: 80;
-  left: var(--gutter);
-  bottom: max(16px, env(safe-area-inset-bottom));
+  right: var(--gutter);
+  top: calc(var(--header-h) + 12px);
+  justify-items: end;
   display: grid;
   gap: 8px;
   pointer-events: none;
@@ -2096,4 +2097,27 @@ p {
   .link-btn {
     transition: none;
   }
+}
+
+/* ---------- mais peças, conta ---------- */
+
+.more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 1px solid var(--linha);
+}
+.settings {
+  margin-top: 56px;
+}
+.settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 28px;
+}
+.settings-form {
+  padding: 16px 0 8px;
 }

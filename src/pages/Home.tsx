@@ -5,11 +5,13 @@ import Rail from '../components/Rail'
 import { useCurrentUser, useDB } from '../lib/db'
 import { ease } from '../lib/motion'
 import { CATEGORIES } from '../lib/taxonomy'
+import { useTitle } from '../lib/useTitle'
 
 export default function Home() {
   const pieces = useDB((d) => d.pieces)
   const ready = useDB((d) => d.ready)
   const user = useCurrentUser()
+  useTitle()
 
   const available = useMemo(() => pieces.filter((p) => p.status === 'disponivel'), [pieces])
   const latest = useMemo(() => [...available].sort((a, b) => b.createdAt - a.createdAt).slice(0, 6), [available])
@@ -22,7 +24,7 @@ export default function Home() {
             Brecho<span>lândia</span>
           </h1>
           <div className="hero-side">
-            <p className="hero-lede">Peças de segunda mão, uma de cada. Você reserva pelo site e retira na loja.</p>
+            <p className="hero-lede">Catálogo do brechó. Você reserva pelo site e retira na loja.</p>
             <div className="hero-actions">
               <Link className="btn" to="/catalogo">
                 Ver o catálogo{ready && available.length > 0 ? ` (${available.length})` : ''}
@@ -87,7 +89,7 @@ export default function Home() {
         <div className="wrap band-grid">
           <p className="band-big">Não entregamos.</p>
           <div>
-            <p>Toda reserva é retirada pessoalmente na loja. Veja endereço, horários e prazo antes de reservar.</p>
+            <p>Toda reserva é retirada na loja. Veja endereço, horários e prazo antes de reservar.</p>
             <Link to="/retirada" className="btn btn-dark">
               Ver como funciona a retirada
             </Link>

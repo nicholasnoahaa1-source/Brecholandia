@@ -42,4 +42,4 @@ export function PieceVisual({ piece, index = 0, className = '' }: { piece: Piece
   )
 }
 
-export const lot = (p: Pick<Piece, 'id'>) => `Nº ${p.id.slice(0, 4).toUpperCase()}`
+export const lot = (p: Pick<Piece, 'id'>) => `Nº ${p.id.slice(0, 6).toUpperCase()}`

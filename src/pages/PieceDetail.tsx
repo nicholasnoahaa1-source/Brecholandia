@@ -7,6 +7,7 @@ import PieceCard from '../components/PieceCard'
 import { brl, holdDeadline, reserve, shortDate, useCurrentUser, useDB } from '../lib/db'
 import { ease, spring } from '../lib/motion'
 import { colorById, conditionById } from '../lib/taxonomy'
+import { useTitle } from '../lib/useTitle'
 
 export default function PieceDetail() {
   const { id } = useParams()
@@ -22,6 +23,7 @@ export default function PieceDetail() {
   const [busy, setBusy] = useState(false)
 
   const ready = useDB((d) => d.ready)
+  useTitle(piece?.title)
   const total = piece?.photos.length ?? 0
   const go = (dir: 1 | -1) => total > 1 && setPhoto((i) => (i + dir + total) % total)
 
@@ -45,11 +47,18 @@ export default function PieceDetail() {
     [pieces, piece],
   )
 
+  const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
   const copyLink = async () => {
     try {
+      // No celular, abre o compartilhamento do sistema (WhatsApp, mensagens…).
+      if (canShare) {
+        await navigator.share({ title: piece?.title, url: window.location.href })
+        return
+      }
       await navigator.clipboard.writeText(window.location.href)
       dialog.toast('Link copiado.')
-    } catch {
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') return
       dialog.toast('Não foi possível copiar. Copie o endereço da barra do navegador.', 'erro')
     }
   }
@@ -221,7 +230,7 @@ export default function PieceDetail() {
                 </Link>
               </div>
             ) : piece.status !== 'disponivel' ? (
-              <p className="muted">Esta peça já foi reservada por outra pessoa. Se a reserva for cancelada, ela volta ao catálogo.</p>
+              <p className="muted">Esta peça já foi reservada por outra pessoa. Se a reserva for cancelada, ela fica disponível de novo.</p>
             ) : !user ? (
               <>
                 <p className="muted">Entre na sua conta para reservar esta peça e retirar na loja.</p>
@@ -250,7 +259,7 @@ export default function PieceDetail() {
                     animate={{ opacity: 1, y: 0, transition: { duration: 0.3, ease } }}
                   >
                     <p>
-                      A peça fica separada no seu nome e sai do catálogo. Não há entrega: você busca na loja.
+                      A peça fica reservada no seu nome e ninguém mais consegue reservá-la. Não há entrega: você busca na loja.
                     </p>
                     {store.address && <p>Endereço: {store.address}</p>}
                     {store.hours && <p>Horário: {store.hours}</p>}
@@ -272,7 +281,7 @@ export default function PieceDetail() {
           </div>
 
           <button className="link-btn copy-link" onClick={copyLink}>
-            Copiar link da peça
+            {canShare ? 'Compartilhar peça' : 'Copiar link da peça'}
           </button>
         </div>
       </div>

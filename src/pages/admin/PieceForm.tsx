@@ -7,6 +7,7 @@ import { savePiece, uid, useDB, type Piece } from '../../lib/db'
 import { compressImage } from '../../lib/images'
 import { spring } from '../../lib/motion'
 import { CATEGORIES, COLORS, CONDITIONS, PIECE_TYPES, SIZE_SUGGESTIONS, type Condition } from '../../lib/taxonomy'
+import { useTitle } from '../../lib/useTitle'
 
 const MAX_PHOTOS = 6
 
@@ -22,6 +23,7 @@ export default function PieceForm() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  useTitle(isNew ? 'Nova peça' : 'Editar peça')
   // Texto digitado, só para a prévia da etiqueta acompanhar o formulário.
   const [draft, setDraft] = useState({
     title: existing?.title ?? '',

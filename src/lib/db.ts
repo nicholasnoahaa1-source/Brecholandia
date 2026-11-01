@@ -147,7 +147,24 @@ export async function logout() {
   await refresh()
 }
 
+/* ---------- minha conta ---------- */
+
+export async function updateAccount(input: { name: string; phone: string }) {
+  const { user } = await api<{ user: User }>('/conta', { method: 'PUT', body: input })
+  set({ user })
+}
+
+export async function changePassword(current: string, next: string) {
+  await api('/conta/senha', { method: 'POST', body: { current, next } })
+}
+
 /* ---------- peças ---------- */
+
+/** Vendida no balcão ('retirada') ou de volta ao catálogo ('disponivel'). */
+export async function setPieceStatus(id: string, status: 'retirada' | 'disponivel') {
+  await api(`/pecas/${encodeURIComponent(id)}/situacao`, { method: 'POST', body: { status } })
+  await refresh()
+}
 
 export async function savePiece(piece: Piece) {
   await api(`/pecas/${encodeURIComponent(piece.id)}`, { method: 'PUT', body: piece })

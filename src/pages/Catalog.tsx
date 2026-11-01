@@ -1,5 +1,5 @@
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import PieceCard from '../components/PieceCard'
 import { Swatch } from '../components/bits'
@@ -7,6 +7,7 @@ import { useModalFocus } from '../components/Dialog'
 import { useCurrentUser, useDB, type Piece } from '../lib/db'
 import { ease, spring } from '../lib/motion'
 import { CATEGORIES, COLORS, CONDITIONS, PIECE_TYPES, colorById, conditionById, type Condition } from '../lib/taxonomy'
+import { useTitle } from '../lib/useTitle'
 
 type Multi = 'cat' | 'tipo' | 'cor' | 'cond' | 'tam'
 
@@ -21,6 +22,10 @@ export default function Catalog() {
   const user = useCurrentUser()
   const [params, setParams] = useSearchParams()
   const [drawer, setDrawer] = useState(false)
+  // Mostra as peças aos poucos para a página não pesar com catálogos grandes.
+  const PAGE = 24
+  const [limit, setLimit] = useState(PAGE)
+  useTitle('Catálogo')
   const drawerRef = useRef<HTMLDivElement>(null)
   const ready = useDB((d) => d.ready)
   useModalFocus(drawer, drawerRef, () => setDrawer(false))
@@ -86,6 +91,11 @@ export default function Catalog() {
     ...(q ? [{ key: 'q', label: `“${q}”`, remove: () => set('q', '') }] : []),
     ...(!showReserved ? [{ key: 'res', label: 'Sem as reservadas', remove: () => set('reservadas', '') }] : []),
   ]
+
+  // Volta ao começo da lista quando os filtros mudam.
+  const paramsKey = params.toString()
+  useEffect(() => setLimit(PAGE), [paramsKey])
+  const shown = filtered.slice(0, limit)
 
   const activeCount = ['cat', 'tipo', 'cor', 'cond', 'tam'].reduce((n, k) => n + params.getAll(k).length, 0) + (min ? 1 : 0) + (max ? 1 : 0) + (q ? 1 : 0)
 
@@ -206,11 +216,21 @@ export default function Catalog() {
             <LayoutGroup>
               <motion.div layout className="grid">
                 <AnimatePresence mode="popLayout">
-                  {filtered.map((p) => (
+                  {shown.map((p) => (
                     <PieceCard key={p.id} piece={p} />
                   ))}
                 </AnimatePresence>
               </motion.div>
+              {filtered.length > limit && (
+                <div className="more">
+                  <p className="muted">
+                    Mostrando {limit} de {filtered.length} peças
+                  </p>
+                  <button className="btn btn-line" onClick={() => setLimit((l) => l + PAGE)}>
+                    Mostrar mais {Math.min(PAGE, filtered.length - limit)}
+                  </button>
+                </div>
+              )}
             </LayoutGroup>
           )}
         </section>

@@ -159,7 +159,49 @@ export function createApp(db, { secureCookies = false, adminEmails = [], adminCo
     res.json({ ok: true })
   })
 
+  /* ---------- minha conta ---------- */
+
+  app.put('/api/conta', async (req, res) => {
+    const user = needUser(req)
+    const name = str(req.body?.name, 120)
+    const phone = str(req.body?.phone, 40)
+    if (!name || !phone) throw new HttpError(400, 'Preencha nome e telefone.')
+    await users.updateOne({ _id: user._id }, { $set: { name, phone } })
+    res.json({ user: publicUser({ ...user, name, phone }) })
+  })
+
+  app.post('/api/conta/senha', async (req, res) => {
+    const user = needUser(req)
+    const current = typeof req.body?.current === 'string' ? req.body.current : ''
+    const next = typeof req.body?.next === 'string' ? req.body.next : ''
+    const key = req.ip ?? 'desconhecido'
+    if (limiter.blocked(key)) throw new HttpError(429, 'Muitas tentativas. Aguarde alguns minutos e tente de novo.')
+    if (!(await verifyPassword(current, user.passwordHash))) {
+      limiter.fail(key)
+      throw new HttpError(400, 'A senha atual está incorreta.')
+    }
+    if (next.length < 6) throw new HttpError(400, 'A nova senha precisa ter pelo menos 6 caracteres.')
+    await users.updateOne({ _id: user._id }, { $set: { passwordHash: await hashPassword(next) } })
+    // Encerra as outras sessões; a atual continua.
+    const sid = readCookie(req, 'sid')
+    await sessions.deleteMany({ userId: user._id, _id: { $ne: sid } })
+    res.json({ ok: true })
+  })
+
   /* ---------- peças ---------- */
+
+  // Vendida direto no balcão (sai do catálogo) ou de volta ao catálogo.
+  app.post('/api/pecas/:id/situacao', async (req, res) => {
+    needAdmin(req)
+    const id = str(req.params.id, 40)
+    const status = req.body?.status
+    if (status !== 'retirada' && status !== 'disponivel') throw new HttpError(400, 'Situação inválida.')
+    if (await reservations.findOne({ pieceId: id, status: 'ativa' }))
+      throw new HttpError(409, 'Esta peça tem uma reserva ativa. Marque a reserva como retirada ou cancele antes.')
+    const r = await pieces.findOneAndUpdate({ _id: id }, { $set: { status } }, { returnDocument: 'after' })
+    if (!r) throw new HttpError(404, 'Peça não encontrada.')
+    res.json({ piece: pieceOut(r) })
+  })
 
   app.put('/api/pecas/:id', async (req, res) => {
     needAdmin(req)

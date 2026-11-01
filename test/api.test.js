@@ -192,3 +192,34 @@ test('papel salvo no banco não vale: conta antiga marcada como admin vira clien
   assert.equal(res.status, 403)
   srv.close()
 })
+
+test('cliente edita nome e telefone e troca a senha', async () => {
+  let r = await ana('/conta', { method: 'PUT', body: { name: 'Ana Souza', phone: '99' } })
+  assert.equal(r.status, 200)
+  assert.equal((await ana('/bootstrap')).body.user.name, 'Ana Souza')
+  assert.equal((await ana('/conta', { method: 'PUT', body: { name: '', phone: '99' } })).status, 400)
+
+  assert.equal((await ana('/conta/senha', { method: 'POST', body: { current: 'errada', next: 'novasenha' } })).status, 400)
+  assert.equal((await ana('/conta/senha', { method: 'POST', body: { current: 'segredo2', next: '123' } })).status, 400)
+  r = await ana('/conta/senha', { method: 'POST', body: { current: 'segredo2', next: 'novasenha' } })
+  assert.equal(r.status, 200)
+  // A sessão atual continua valendo e a senha nova funciona.
+  assert.equal((await ana('/bootstrap')).body.user.email, 'ana@x.com')
+  const c = client()
+  assert.equal((await c('/entrar', { method: 'POST', body: { email: 'ana@x.com', password: 'segredo2' } })).status, 401)
+  assert.equal((await c('/entrar', { method: 'POST', body: { email: 'ana@x.com', password: 'novasenha' } })).status, 200)
+  assert.equal((await anon('/conta', { method: 'PUT', body: { name: 'x', phone: '1' } })).status, 401)
+})
+
+test('loja marca peça vendida no balcão e devolve ao catálogo', async () => {
+  await admin('/pecas/p3', { method: 'PUT', body: { ...piece, title: 'Blusa', photos: [] } })
+  assert.equal((await ana('/pecas/p3/situacao', { method: 'POST', body: { status: 'retirada' } })).status, 403)
+  let r = await admin('/pecas/p3/situacao', { method: 'POST', body: { status: 'retirada' } })
+  assert.equal(r.body.piece.status, 'retirada')
+  assert.ok(!(await anon('/bootstrap')).body.pieces.some((p) => p.id === 'p3'))
+  await admin('/pecas/p3/situacao', { method: 'POST', body: { status: 'disponivel' } })
+  assert.ok((await anon('/bootstrap')).body.pieces.some((p) => p.id === 'p3'))
+  // Com reserva ativa, não dá para mudar por aqui.
+  await bia('/reservas', { method: 'POST', body: { pieceId: 'p3' } })
+  assert.equal((await admin('/pecas/p3/situacao', { method: 'POST', body: { status: 'retirada' } })).status, 409)
+})

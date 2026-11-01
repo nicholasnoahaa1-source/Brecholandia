@@ -1,9 +1,11 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { useState } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { PieceVisual, lot } from '../components/bits'
 import { useDialog } from '../components/Dialog'
-import { brl, closeReservation, holdDeadline, logout, shortDate, useCurrentUser, useDB } from '../lib/db'
+import { brl, changePassword, closeReservation, holdDeadline, logout, shortDate, updateAccount, useCurrentUser, useDB, type User } from '../lib/db'
+import { ease, spring } from '../lib/motion'
+import { useTitle } from '../lib/useTitle'
 
 const STATUS = { ativa: 'Aguardando retirada', retirada: 'Retirada', cancelada: 'Cancelada' }
 
@@ -12,6 +14,7 @@ export default function Account() {
   const mine = useDB((d) => d.myReservations)
   const store = useDB((d) => d.store)
   const navigate = useNavigate()
+  useTitle('Minhas reservas')
   const [error, setError] = useState('')
   const dialog = useDialog()
 
@@ -134,6 +137,112 @@ export default function Account() {
           </table>
         </>
       )}
+
+      <AccountSettings user={user} />
     </div>
+  )
+}
+
+function AccountSettings({ user }: { user: User }) {
+  const [open, setOpen] = useState<'' | 'dados' | 'senha'>('')
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const dialog = useDialog()
+
+  const run = async (fn: () => Promise<void>, done: string) => {
+    setBusy(true)
+    setMsg(null)
+    try {
+      await fn()
+      setOpen('')
+      dialog.toast(done)
+    } catch (e) {
+      setMsg({ text: (e as Error).message, ok: false })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const saveData = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const f = new FormData(e.currentTarget)
+    run(() => updateAccount({ name: String(f.get('nome') ?? ''), phone: String(f.get('telefone') ?? '') }), 'Dados salvos.')
+  }
+  const savePassword = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const f = new FormData(e.currentTarget)
+    const next = String(f.get('nova') ?? '')
+    if (next !== String(f.get('nova2') ?? '')) return setMsg({ text: 'As senhas novas não conferem.', ok: false })
+    run(() => changePassword(String(f.get('atual') ?? ''), next), 'Senha trocada.')
+  }
+
+  const toggle = (k: 'dados' | 'senha') => {
+    setMsg(null)
+    setOpen((o) => (o === k ? '' : k))
+  }
+
+  return (
+    <section className="settings" aria-labelledby="settings-title">
+      <h2 id="settings-title" className="section-title">
+        Seus dados
+      </h2>
+      <div className="settings-row">
+        <button className="link-btn" aria-expanded={open === 'dados'} onClick={() => toggle('dados')}>
+          Alterar nome e telefone
+        </button>
+        <button className="link-btn" aria-expanded={open === 'senha'} onClick={() => toggle('senha')}>
+          Trocar senha
+        </button>
+      </div>
+      <AnimatePresence initial={false} mode="wait">
+        {open && (
+          <motion.div
+            key={open}
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto', transition: { duration: 0.28, ease } }}
+            exit={{ opacity: 0, height: 0, transition: { duration: 0.18 } }}
+            style={{ overflow: 'hidden' }}
+          >
+            {open === 'dados' ? (
+              <form className="form form-wide settings-form" onSubmit={saveData}>
+                <label className="field">
+                  <span className="field-label">Nome</span>
+                  <input name="nome" defaultValue={user.name} autoComplete="name" required />
+                </label>
+                <label className="field">
+                  <span className="field-label">Telefone ou WhatsApp</span>
+                  <input name="telefone" type="tel" defaultValue={user.phone} autoComplete="tel" required />
+                  <small>A loja vê este número junto das suas reservas.</small>
+                </label>
+                {msg && <p className="error" role="alert">{msg.text}</p>}
+                <motion.button className="btn" disabled={busy} whileTap={{ scale: 0.97 }} transition={spring}>
+                  {busy ? 'Salvando…' : 'Salvar dados'}
+                </motion.button>
+              </form>
+            ) : (
+              <form className="form form-wide settings-form" onSubmit={savePassword}>
+                <label className="field">
+                  <span className="field-label">Senha atual</span>
+                  <input name="atual" type="password" autoComplete="current-password" required />
+                </label>
+                <label className="field">
+                  <span className="field-label">Nova senha</span>
+                  <input name="nova" type="password" autoComplete="new-password" minLength={6} required />
+                  <small>Pelo menos 6 caracteres. Outros aparelhos conectados saem da conta.</small>
+                </label>
+                <label className="field">
+                  <span className="field-label">Repita a nova senha</span>
+                  <input name="nova2" type="password" autoComplete="new-password" required />
+                </label>
+                {msg && <p className="error" role="alert">{msg.text}</p>}
+                <motion.button className="btn" disabled={busy} whileTap={{ scale: 0.97 }} transition={spring}>
+                  {busy ? 'Trocando…' : 'Trocar senha'}
+                </motion.button>
+              </form>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </section>
   )
 }

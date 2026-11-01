@@ -1,14 +1,16 @@
 import { Link } from 'react-router-dom'
 import { useCurrentUser, useDB } from '../lib/db'
+import { useTitle } from '../lib/useTitle'
 
 export default function Pickup() {
   const store = useDB((d) => d.store)
   const user = useCurrentUser()
+  useTitle('Como retirar')
 
   const steps = [
-    ['Escolha no catálogo', 'Filtre por categoria, tipo de peça, cor, tamanho e condição. Cada peça é única.'],
-    ['Reserve com a sua conta', 'Entre ou crie uma conta e toque em “Reservar para retirada”. A peça sai do catálogo e fica no seu nome.'],
-    ['Retire na loja', 'Não fazemos entregas nem envios. A peça reservada é retirada pessoalmente na loja.'],
+    ['Escolha no catálogo', 'Filtre por categoria, tipo de peça, cor, tamanho, condição e preço.'],
+    ['Reserve com a sua conta', 'Entre ou crie uma conta e toque em “Reservar para retirada”. A peça fica reservada no seu nome e ninguém mais consegue reservá-la.'],
+    ['Retire na loja', 'Não fazemos entregas nem envios. A peça reservada é retirada na loja.'],
   ]
 
   const info = [

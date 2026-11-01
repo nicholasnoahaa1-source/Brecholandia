@@ -13,6 +13,7 @@ import Admin from './pages/admin/Admin'
 import PieceForm from './pages/admin/PieceForm'
 import { useCurrentUser, useDB } from './lib/db'
 import { page } from './lib/motion'
+import { useTitle } from './lib/useTitle'
 
 function Page({ children }: { children: ReactNode }) {
   return (
@@ -70,6 +71,7 @@ export default function App() {
 }
 
 function NotFound() {
+  useTitle('Página não encontrada')
   return (
     <section className="wrap empty-state">
       <h1 className="display-m">Esta página não está no cabide.</h1>
