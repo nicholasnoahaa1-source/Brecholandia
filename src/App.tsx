@@ -26,7 +26,7 @@ function RequireUser({ children, admin }: { children: ReactNode; admin?: boolean
   const user = useCurrentUser()
   const ready = useDB((d) => d.ready)
   const loc = useLocation()
-  if (!ready) return <p className="wrap loading mono">Carregando…</p>
+  if (!ready) return <p className="wrap loading">Carregando…</p>
   if (!user) return <Navigate to={`/entrar?volta=${encodeURIComponent(loc.pathname)}`} replace />
   if (admin && user.role !== 'admin') return <Navigate to="/" replace />
   return <>{children}</>
@@ -72,7 +72,6 @@ export default function App() {
 function NotFound() {
   return (
     <section className="wrap empty-state">
-      <p className="mono">Erro 404</p>
       <h1 className="display-m">Esta página não está no cabide.</h1>
       <a className="btn" href="#/catalogo">Ver o catálogo</a>
     </section>

@@ -18,12 +18,12 @@ export default function Footer() {
         <dl className="footer-info">
           {rows.map(([k, v]) => (
             <div key={k}>
-              <dt className="mono">{k}</dt>
+              <dt>{k}</dt>
               <dd>{v}</dd>
             </div>
           ))}
           <div>
-            <dt className="mono">Entrega</dt>
+            <dt>Entrega</dt>
             <dd>Não fazemos. Toda peça é retirada na loja.</dd>
           </div>
         </dl>

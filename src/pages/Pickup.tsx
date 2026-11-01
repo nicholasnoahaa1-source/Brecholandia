@@ -1,7 +1,5 @@
-import { motion } from 'motion/react'
 import { Link } from 'react-router-dom'
 import { useCurrentUser, useDB } from '../lib/db'
-import { rise, stagger } from '../lib/motion'
 
 export default function Pickup() {
   const store = useDB((d) => d.store)
@@ -24,31 +22,28 @@ export default function Pickup() {
 
   return (
     <div className="wrap pickup">
-      <h1 className="display-xl pickup-title">
-        Só
-        <br />
-        <span className="hl">retirada.</span>
-      </h1>
+      <h1 className="display-xl pickup-title">Só retirada.</h1>
+      <p className="pickup-lede">Não fazemos entregas nem envios. É assim que uma peça sai da arara e vai com você:</p>
 
-      <motion.ol className="steps" variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.3 }}>
+      <ol className="steps">
         {steps.map(([t, d], i) => (
-          <motion.li key={t} variants={rise}>
+          <li key={t}>
             <span className="step-n">{i + 1}</span>
             <div>
               <h2 className="display-s">{t}</h2>
               <p>{d}</p>
             </div>
-          </motion.li>
+          </li>
         ))}
-      </motion.ol>
+      </ol>
 
       <section className="pickup-info">
-        <h2 className="mono">Dados da loja</h2>
+        <h2 className="display-s">Onde e quando retirar</h2>
         {info.length ? (
           <dl className="specs specs-lg">
             {info.map(([k, v]) => (
               <div key={k}>
-                <dt className="mono">{k}</dt>
+                <dt>{k}</dt>
                 <dd>{v}</dd>
               </div>
             ))}

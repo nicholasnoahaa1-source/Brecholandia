@@ -4,7 +4,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import { PieceVisual, lot } from '../components/bits'
 import { useDialog } from '../components/Dialog'
 import { brl, closeReservation, holdDeadline, logout, shortDate, useCurrentUser, useDB } from '../lib/db'
-import { rise, stagger } from '../lib/motion'
 
 const STATUS = { ativa: 'Aguardando retirada', retirada: 'Retirada', cancelada: 'Cancelada' }
 
@@ -40,10 +39,11 @@ export default function Account() {
     <div className="wrap account">
       <div className="account-head">
         <div>
-          <p className="mono">Minha conta{user.role === 'admin' ? ' · administradora' : ''}</p>
           <h1 className="display-l">{user.name}</h1>
-          <p className="muted">
-            {user.email} · {user.phone}
+          <p className="muted account-who">
+            <span>{user.email}</span>
+            <span>{user.phone}</span>
+            {user.role === 'admin' && <span>Administra a loja</span>}
           </p>
         </div>
         <button
@@ -59,32 +59,29 @@ export default function Account() {
 
       {active.length > 0 && (store.address || store.hours) && (
         <div className="pickup-note">
-          <span className="mono">Onde retirar</span>
-          <p>
-            {store.address}
-            {store.address && store.hours ? ' · ' : ''}
-            {store.hours}
-          </p>
+          <strong>Onde retirar</strong>
+          {store.address && <p>{store.address}</p>}
+          {store.hours && <p>{store.hours}</p>}
         </div>
       )}
 
       {error && <p className="error" role="alert">{error}</p>}
 
       <h2 className="section-title">
-        Reservas ativas <span className="mono">{active.length}</span>
+        Esperando você retirar <span className="count">{active.length}</span>
       </h2>
       {active.length === 0 ? (
         <p className="muted">
           Nenhuma reserva no momento. <Link to="/catalogo">Ver o catálogo</Link>
         </p>
       ) : (
-        <motion.ul className="res-list" variants={stagger} initial="hidden" animate="show">
+        <ul className="res-list">
           <AnimatePresence>
             {active.map((r) => {
               const p = r.piece
               const dl = holdDeadline(r, store)
               return (
-                <motion.li key={r.id} variants={rise} layout exit={{ opacity: 0, x: -20 }} className="res">
+                <motion.li key={r.id} layout exit={{ opacity: 0, x: -20, transition: { duration: 0.2 } }} className="res">
                   {p ? (
                     <Link to={`/peca/${p.id}`} className="res-img">
                       <PieceVisual piece={p} />
@@ -93,12 +90,12 @@ export default function Account() {
                     <div className="res-img" />
                   )}
                   <div className="res-body">
-                    <span className="mono">{p ? lot(p) : 'Peça removida'}</span>
+                    <span className="meta">{p ? lot(p) : 'Peça removida'}</span>
                     <strong>{p?.title}</strong>
                     <span>{p && brl(p.price)}</span>
-                    <span className="mono muted">
+                    <span className="meta">
                       Reservada em {shortDate(r.createdAt)}
-                      {dl && ` · retirar até ${shortDate(dl)}`}
+                      {dl && <>, retirar até {shortDate(dl)}</>}
                     </span>
                   </div>
                   <button className="link-btn" onClick={() => cancel(r.id, p?.title)}>
@@ -108,7 +105,7 @@ export default function Account() {
               )
             })}
           </AnimatePresence>
-        </motion.ul>
+        </ul>
       )}
 
       {past.length > 0 && (
@@ -128,7 +125,7 @@ export default function Account() {
                 return (
                   <tr key={r.id}>
                     <td>{p?.title ?? 'Peça removida'}</td>
-                    <td className="mono">{shortDate(r.closedAt ?? r.createdAt)}</td>
+                    <td className="meta">{shortDate(r.closedAt ?? r.createdAt)}</td>
                     <td>{STATUS[r.status]}</td>
                   </tr>
                 )

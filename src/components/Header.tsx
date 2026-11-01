@@ -14,18 +14,14 @@ export default function Header() {
 
   const links = [
     { to: '/catalogo', label: 'Catálogo' },
-    { to: '/retirada', label: 'Retirada' },
+    { to: '/retirada', label: 'Como retirar' },
     ...(user?.role === 'admin' ? [{ to: '/admin', label: 'Gerenciar' }] : []),
-    user ? { to: '/conta', label: user.name.split(' ')[0] || 'Minha conta' } : { to: '/entrar', label: 'Entrar' },
+    user ? { to: '/conta', label: 'Minhas reservas' } : { to: '/entrar', label: 'Entrar' },
   ]
 
   return (
     <header className="header">
-      <div className="strip">
-        <span>Somente retirada na loja</span>
-        <span aria-hidden>/</span>
-        <span>Não fazemos entregas</span>
-      </div>
+      <p className="strip">Somente retirada na loja. Não fazemos entregas.</p>
       <div className="header-row wrap">
         <NavLink to="/" className="brand" aria-label="Brecholândia, início">
           <Logo />
@@ -47,13 +43,8 @@ export default function Header() {
           ))}
         </nav>
 
-        <button
-          className="menu-btn"
-          aria-expanded={open}
-          aria-controls="menu-mobile"
-          onClick={() => setOpen((o) => !o)}
-        >
-          <span className="mono">{open ? 'Fechar' : 'Menu'}</span>
+        <button className="menu-btn" aria-expanded={open} aria-controls="menu-mobile" onClick={() => setOpen((o) => !o)}>
+          {open ? 'Fechar' : 'Menu'}
         </button>
       </div>
 
@@ -63,21 +54,14 @@ export default function Header() {
             id="menu-mobile"
             className="nav-mobile"
             aria-label="Principal"
-            initial={{ opacity: 0, y: -12 }}
-            animate={{ opacity: 1, y: 0, transition: { duration: 0.3, ease } }}
-            exit={{ opacity: 0, y: -8, transition: { duration: 0.18 } }}
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0, transition: { duration: 0.25, ease } }}
+            exit={{ opacity: 0, y: -6, transition: { duration: 0.15 } }}
           >
-            {links.map((l, i) => (
-              <motion.div
-                key={l.to}
-                initial={{ opacity: 0, x: -16 }}
-                animate={{ opacity: 1, x: 0, transition: { delay: 0.04 * i, duration: 0.35, ease } }}
-              >
-                <NavLink to={l.to} className="nav-mobile-link">
-                  <span className="mono">0{i + 1}</span>
-                  {l.label}
-                </NavLink>
-              </motion.div>
+            {links.map((l) => (
+              <NavLink key={l.to} to={l.to} className="nav-mobile-link">
+                {l.label}
+              </NavLink>
             ))}
           </motion.nav>
         )}

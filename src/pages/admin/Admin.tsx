@@ -61,7 +61,15 @@ const PSTATUS = { disponivel: 'Disponível', reservada: 'Reservada', retirada: '
 function PiecesTab() {
   const pieces = useDB((d) => d.pieces)
   const [filter, setFilter] = useState<'todas' | keyof typeof PSTATUS>('todas')
-  const list = useMemo(() => pieces.filter((p) => filter === 'todas' || p.status === filter), [pieces, filter])
+  const [q, setQ] = useState('')
+  const list = useMemo(() => {
+    const term = q.trim().toLowerCase()
+    return pieces.filter(
+      (p) =>
+        (filter === 'todas' || p.status === filter) &&
+        (!term || [p.title, p.brand, p.type, lot(p)].join(' ').toLowerCase().includes(term)),
+    )
+  }, [pieces, filter, q])
   const dialog = useDialog()
   const remove = async (id: string, title: string) => {
     const ok = await dialog.confirm({
@@ -91,13 +99,20 @@ function PiecesTab() {
 
   return (
     <>
-      <div className="chips">
-        {(['todas', 'disponivel', 'reservada', 'retirada'] as const).map((s) => (
-          <button key={s} className={`size-opt ${filter === s ? 'on' : ''}`} onClick={() => setFilter(s)}>
-            {s === 'todas' ? 'Todas' : PSTATUS[s]} <span className="mono">{s === 'todas' ? pieces.length : pieces.filter((p) => p.status === s).length}</span>
-          </button>
-        ))}
+      <div className="admin-tools">
+        <div className="chips" role="group" aria-label="Mostrar">
+          {(['todas', 'disponivel', 'reservada', 'retirada'] as const).map((s) => (
+            <button key={s} className={`size-opt ${filter === s ? 'on' : ''}`} aria-pressed={filter === s} onClick={() => setFilter(s)}>
+              {s === 'todas' ? 'Todas' : PSTATUS[s]} <span className="count">{s === 'todas' ? pieces.length : pieces.filter((p) => p.status === s).length}</span>
+            </button>
+          ))}
+        </div>
+        <label className="search">
+          <span className="meta">Procurar peça</span>
+          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nome, marca, tipo ou código" />
+        </label>
       </div>
+      {list.length === 0 && <p className="muted">Nenhuma peça com essa busca.</p>}
       <ul className="admin-list">
         <AnimatePresence initial={false}>
           {list.map((p) => (
@@ -106,8 +121,8 @@ function PiecesTab() {
                 <PieceVisual piece={p} />
               </div>
               <div className="admin-main">
-                <span className="mono">
-                  {lot(p)} · {p.type} · {p.size || 's/ tam.'}
+                <span className="meta">
+                  {lot(p)}, {p.type.toLowerCase()}, {p.size ? `tamanho ${p.size}` : 'sem tamanho'}
                 </span>
                 <strong>{p.title}</strong>
               </div>
@@ -177,18 +192,24 @@ function ReservationsTab() {
                 <motion.li key={r.id} layout exit={{ opacity: 0, x: 24 }} transition={spring} className="res-admin">
                   <div className="admin-thumb">{p && <PieceVisual piece={p} />}</div>
                   <div className="admin-main">
-                    <span className="mono">
-                      {p ? lot(p) : '—'} · reservada em {shortDate(r.createdAt)}
+                    <span className="meta">
+                      {p ? lot(p) : 'Peça removida'}, reservada em {shortDate(r.createdAt)}
                       {dl && (
                         <em className={late ? 'late' : ''}>
                           {' '}
-                          · {late ? 'prazo vencido em' : 'retirar até'} {shortDate(dl)}
+                          , {late ? 'prazo vencido em' : 'retirar até'} {shortDate(dl)}
                         </em>
                       )}
                     </span>
                     <strong>{p?.title ?? 'Peça removida'}</strong>
                     <span className="muted">
-                      {u ? `${u.name} · ${u.phone} · ${u.email}` : 'Cliente removido'}
+                      {u ? (
+                        <>
+                          {u.name}, <a href={`tel:${u.phone.replace(/[^\d+]/g, '')}`}>{u.phone}</a>, {u.email}
+                        </>
+                      ) : (
+                        'Cliente removido'
+                      )}
                     </span>
                   </div>
                   <span className="admin-price">{p && brl(p.price)}</span>
@@ -225,7 +246,7 @@ function ReservationsTab() {
                   <tr key={r.id}>
                     <td>{r.piece?.title ?? 'Peça removida'}</td>
                     <td>{r.customer?.name ?? '—'}</td>
-                    <td className="mono">{shortDate(r.closedAt ?? r.createdAt)}</td>
+                    <td className="meta">{shortDate(r.closedAt ?? r.createdAt)}</td>
                     <td>{r.status === 'retirada' ? 'Retirada' : 'Cancelada'}</td>
                   </tr>
                 ))}
@@ -273,7 +294,7 @@ function StoreTab() {
       </p>
       {fields.map((f) => (
         <label key={f.k} className="field">
-          <span className="mono">{f.label}</span>
+          <span className="field-label">{f.label}</span>
           {f.area ? (
             <textarea name={f.k} defaultValue={store[f.k]} rows={2} />
           ) : (
@@ -289,7 +310,7 @@ function StoreTab() {
         </motion.button>
         <AnimatePresence>
           {saved && (
-            <motion.span className="mono ok" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}>
+            <motion.span className="ok" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}>
               Salvo
             </motion.span>
           )}

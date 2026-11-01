@@ -44,7 +44,6 @@ export default function Auth() {
   return (
     <div className="wrap auth">
       <div className="auth-side">
-        <p className="mono">Conta</p>
         <h1 className="display-l">{mode === 'entrar' ? 'Entrar' : 'Criar conta'}</h1>
         <p className="auth-note">
           A conta serve para reservar peças. Cada peça reservada fica separada no seu nome até você retirar na loja.
@@ -127,13 +126,13 @@ function Field({ label, hint, type, ...rest }: { label: string; hint?: string } 
   const hintId = hint ? `${rest.name}-dica` : undefined
   return (
     <div className="field">
-      <label className="mono" htmlFor={rest.name}>
+      <label className="field-label" htmlFor={rest.name}>
         {label}
       </label>
       <div className={isPassword ? 'field-row' : undefined}>
         <input id={rest.name} type={isPassword && show ? 'text' : type} aria-describedby={hintId} {...rest} />
         {isPassword && (
-          <button type="button" className="field-toggle mono" aria-pressed={show} onClick={() => setShow((s) => !s)}>
+          <button type="button" className="field-toggle" aria-pressed={show} onClick={() => setShow((s) => !s)}>
             {show ? 'Ocultar' : 'Mostrar'}
           </button>
         )}

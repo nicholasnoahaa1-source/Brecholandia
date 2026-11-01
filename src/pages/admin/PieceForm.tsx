@@ -2,6 +2,7 @@ import { AnimatePresence, Reorder, motion } from 'motion/react'
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ConditionMeter, Swatch } from '../../components/bits'
+import PieceCard from '../../components/PieceCard'
 import { savePiece, uid, useDB, type Piece } from '../../lib/db'
 import { compressImage } from '../../lib/images'
 import { spring } from '../../lib/motion'
@@ -21,6 +22,13 @@ export default function PieceForm() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  // Texto digitado, só para a prévia da etiqueta acompanhar o formulário.
+  const [draft, setDraft] = useState({
+    title: existing?.title ?? '',
+    type: existing?.type ?? '',
+    size: existing?.size ?? '',
+    price: existing ? String(existing.price) : '',
+  })
 
   if (!isNew && !existing)
     return (
@@ -89,20 +97,53 @@ export default function PieceForm() {
 
   return (
     <div className="wrap piece-form">
-      <Link to="/admin" className="back mono">
-        ← Gerenciar
+      <Link to="/admin" className="back">
+        Voltar para Gerenciar
       </Link>
       <h1 className="display-l">{isNew ? 'Nova peça' : 'Editar peça'}</h1>
 
-      <form className="pf-grid" onSubmit={submit}>
+      <form
+        className="pf-grid"
+        onSubmit={submit}
+        onChange={(e) => {
+          const f = new FormData(e.currentTarget)
+          const v = (k: string) => String(f.get(k) ?? '')
+          setDraft({ title: v('title'), type: v('type'), size: v('size'), price: v('price') })
+        }}
+      >
         <section className="pf-photos">
-          <h2 className="mono">Fotos ({photos.length}/{MAX_PHOTOS})</h2>
+          <div className="pf-preview" aria-label="Prévia no catálogo">
+            <p className="field-label">Assim ela aparece no catálogo</p>
+            <PieceCard
+              linkable={false}
+              piece={{
+                id: existing?.id ?? '—',
+                title: draft.title,
+                type: draft.type || 'Peça',
+                size: draft.size,
+                price: parseFloat(draft.price.replace(/\./g, '').replace(',', '.')) || 0,
+                colors,
+                condition,
+                photos,
+                status: 'disponivel',
+                category: '',
+                brand: '',
+                measurements: '',
+                description: '',
+                conditionNotes: '',
+                createdAt: 0,
+              }}
+            />
+          </div>
+          <h2 className="field-label">
+            Fotos ({photos.length} de {MAX_PHOTOS})
+          </h2>
           <p className="muted small-txt">A primeira foto é a capa. Arraste para mudar a ordem.</p>
           <Reorder.Group axis="y" values={photos} onReorder={setPhotos} className="pf-photo-list">
             {photos.map((src, i) => (
               <Reorder.Item key={src} value={src} className="pf-photo" transition={spring}>
                 <img src={src} alt={`Foto ${i + 1}`} draggable={false} />
-                <span className="mono">{i === 0 ? 'Capa' : `Foto ${i + 1}`}</span>
+                <span>{i === 0 ? 'Capa' : `Foto ${i + 1}`}</span>
                 <button type="button" className="link-btn danger" onClick={() => setPhotos((p) => p.filter((x) => x !== src))}>
                   Remover
                 </button>
@@ -119,13 +160,13 @@ export default function PieceForm() {
 
         <section className="pf-fields">
           <label className="field">
-            <span className="mono">Nome da peça</span>
+            <span className="field-label">Nome da peça</span>
             <input name="title" defaultValue={existing?.title} required placeholder="Como a peça aparece no catálogo" />
           </label>
 
           <div className="row-2">
             <label className="field">
-              <span className="mono">Categoria</span>
+              <span className="field-label">Categoria</span>
               <select name="category" defaultValue={existing?.category ?? ''} required>
                 <option value="" disabled>
                   Escolha
@@ -136,7 +177,7 @@ export default function PieceForm() {
               </select>
             </label>
             <label className="field">
-              <span className="mono">Tipo de peça</span>
+              <span className="field-label">Tipo de peça</span>
               <select name="type" defaultValue={existing?.type ?? ''} required>
                 <option value="" disabled>
                   Escolha
@@ -150,11 +191,11 @@ export default function PieceForm() {
 
           <div className="row-3">
             <label className="field">
-              <span className="mono">Preço (R$)</span>
+              <span className="field-label">Preço (R$)</span>
               <input name="price" inputMode="decimal" defaultValue={existing ? String(existing.price).replace('.', ',') : ''} required placeholder="0,00" />
             </label>
             <label className="field">
-              <span className="mono">Tamanho</span>
+              <span className="field-label">Tamanho</span>
               <input name="size" list="sizes" defaultValue={existing?.size} />
               <datalist id="sizes">
                 {SIZE_SUGGESTIONS.map((s) => (
@@ -163,13 +204,13 @@ export default function PieceForm() {
               </datalist>
             </label>
             <label className="field">
-              <span className="mono">Marca</span>
+              <span className="field-label">Marca</span>
               <input name="brand" defaultValue={existing?.brand} />
             </label>
           </div>
 
           <fieldset className="field">
-            <legend className="mono">Cor ({colors.length ? colors.length : 'escolha ao menos uma'})</legend>
+            <legend className="field-label">Cor ({colors.length ? colors.length : 'escolha ao menos uma'})</legend>
             <div className="color-grid">
               {COLORS.map((c) => {
                 const on = colors.includes(c.id)
@@ -192,7 +233,7 @@ export default function PieceForm() {
           </fieldset>
 
           <fieldset className="field">
-            <legend className="mono">Condição</legend>
+            <legend className="field-label">Condição</legend>
             <div className="cond-pick">
               {CONDITIONS.map((c) => (
                 <label key={c.id} className={`cond-opt ${condition === c.id ? 'on' : ''}`}>
@@ -207,19 +248,19 @@ export default function PieceForm() {
           <AnimatePresence initial={false}>
             {(condition === 'detalhes' || existing?.conditionNotes) && (
               <motion.label className="field" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
-                <span className="mono">Detalhes da condição</span>
+                <span className="field-label">Detalhes da condição</span>
                 <textarea name="conditionNotes" rows={2} defaultValue={existing?.conditionNotes} placeholder="Descreva manchas, furos, desgaste, botão faltando…" />
               </motion.label>
             )}
           </AnimatePresence>
 
           <label className="field">
-            <span className="mono">Medidas</span>
+            <span className="field-label">Medidas</span>
             <input name="measurements" defaultValue={existing?.measurements} placeholder="Ex.: busto, cintura, comprimento em cm" />
           </label>
 
           <label className="field">
-            <span className="mono">Descrição</span>
+            <span className="field-label">Descrição</span>
             <textarea name="description" rows={4} defaultValue={existing?.description} />
           </label>
 
