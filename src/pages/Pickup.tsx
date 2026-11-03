@@ -1,16 +1,16 @@
-import { motion } from 'motion/react'
 import { Link } from 'react-router-dom'
 import { useCurrentUser, useDB } from '../lib/db'
-import { rise, stagger } from '../lib/motion'
+import { useTitle } from '../lib/useTitle'
 
 export default function Pickup() {
   const store = useDB((d) => d.store)
   const user = useCurrentUser()
+  useTitle('Como retirar')
 
   const steps = [
-    ['Escolha no catálogo', 'Filtre por categoria, tipo de peça, cor, tamanho e condição. Cada peça é única.'],
-    ['Reserve com a sua conta', 'Entre ou crie uma conta e toque em “Reservar para retirada”. A peça sai do catálogo e fica no seu nome.'],
-    ['Retire na loja', 'Não fazemos entregas nem envios. A peça reservada é retirada pessoalmente na loja.'],
+    ['Escolha no catálogo', 'Filtre por categoria, tipo de peça, cor, tamanho, condição e preço.'],
+    ['Reserve com a sua conta', 'Entre ou crie uma conta e toque em “Reservar para retirada”. A peça fica reservada no seu nome e ninguém mais consegue reservá-la.'],
+    ['Retire na loja', 'Não fazemos entregas nem envios. A peça reservada é retirada na loja.'],
   ]
 
   const info = [
@@ -24,31 +24,28 @@ export default function Pickup() {
 
   return (
     <div className="wrap pickup">
-      <h1 className="display-xl pickup-title">
-        Só
-        <br />
-        <span className="hl">retirada.</span>
-      </h1>
+      <h1 className="display-xl pickup-title">Só retirada.</h1>
+      <p className="pickup-lede">Não fazemos entregas nem envios. É assim que uma peça sai da arara e vai com você:</p>
 
-      <motion.ol className="steps" variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.3 }}>
+      <ol className="steps">
         {steps.map(([t, d], i) => (
-          <motion.li key={t} variants={rise}>
+          <li key={t}>
             <span className="step-n">{i + 1}</span>
             <div>
               <h2 className="display-s">{t}</h2>
               <p>{d}</p>
             </div>
-          </motion.li>
+          </li>
         ))}
-      </motion.ol>
+      </ol>
 
       <section className="pickup-info">
-        <h2 className="mono">Dados da loja</h2>
+        <h2 className="display-s">Onde e quando retirar</h2>
         {info.length ? (
           <dl className="specs specs-lg">
             {info.map(([k, v]) => (
               <div key={k}>
-                <dt className="mono">{k}</dt>
+                <dt>{k}</dt>
                 <dd>{v}</dd>
               </div>
             ))}

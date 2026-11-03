@@ -1,9 +1,11 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PieceVisual, lot } from '../../components/bits'
-import { brl, closeReservation, deletePiece, holdDeadline, saveStore, shortDate, useDB, type StoreInfo } from '../../lib/db'
+import { useDialog } from '../../components/Dialog'
+import { brl, closeReservation, deletePiece, holdDeadline, loadReservations, saveStore, setPieceStatus, shortDate, useDB, type StoreInfo } from '../../lib/db'
 import { ease, spring } from '../../lib/motion'
+import { useTitle } from '../../lib/useTitle'
 
 const TABS = [
   { id: 'pecas', label: 'Peças' },
@@ -13,8 +15,13 @@ const TABS = [
 
 export default function Admin() {
   const [params, setParams] = useSearchParams()
+  useTitle('Gerenciar')
   const tab = (params.get('aba') as (typeof TABS)[number]['id']) || 'pecas'
-  const activeRes = useDB((d) => d.reservations).filter((r) => r.status === 'ativa').length
+  const activeRes = useDB((d) => d.allReservations).filter((r) => r.status === 'ativa').length
+
+  useEffect(() => {
+    loadReservations(true).catch(() => {})
+  }, [])
 
   return (
     <div className="wrap admin">
@@ -56,7 +63,47 @@ const PSTATUS = { disponivel: 'Disponível', reservada: 'Reservada', retirada: '
 function PiecesTab() {
   const pieces = useDB((d) => d.pieces)
   const [filter, setFilter] = useState<'todas' | keyof typeof PSTATUS>('todas')
-  const list = useMemo(() => pieces.filter((p) => filter === 'todas' || p.status === filter), [pieces, filter])
+  const [q, setQ] = useState('')
+  const list = useMemo(() => {
+    const term = q.trim().toLowerCase()
+    return pieces.filter(
+      (p) =>
+        (filter === 'todas' || p.status === filter) &&
+        (!term || [p.title, p.brand, p.type, lot(p)].join(' ').toLowerCase().includes(term)),
+    )
+  }, [pieces, filter, q])
+  const dialog = useDialog()
+  const changeStatus = async (id: string, title: string, status: 'retirada' | 'disponivel') => {
+    if (status === 'retirada') {
+      const ok = await dialog.confirm({
+        title: `“${title}” foi vendida no balcão?`,
+        body: 'A peça sai do catálogo. Se precisar, ela pode voltar depois pelo filtro “Retirada”.',
+        confirm: 'Tirar do catálogo',
+      })
+      if (!ok) return
+    }
+    try {
+      await setPieceStatus(id, status)
+      dialog.toast(status === 'retirada' ? 'Peça tirada do catálogo.' : 'Peça de volta ao catálogo.')
+    } catch (e) {
+      dialog.toast((e as Error).message, 'erro')
+    }
+  }
+  const remove = async (id: string, title: string) => {
+    const ok = await dialog.confirm({
+      title: `Excluir “${title}”?`,
+      body: 'A peça e as fotos saem do catálogo de vez. Se houver reserva ativa, ela é cancelada.',
+      confirm: 'Excluir peça',
+      danger: true,
+    })
+    if (!ok) return
+    try {
+      await deletePiece(id)
+      dialog.toast('Peça excluída.')
+    } catch (e) {
+      dialog.toast((e as Error).message, 'erro')
+    }
+  }
 
   if (!pieces.length)
     return (
@@ -70,23 +117,30 @@ function PiecesTab() {
 
   return (
     <>
-      <div className="chips">
-        {(['todas', 'disponivel', 'reservada', 'retirada'] as const).map((s) => (
-          <button key={s} className={`size-opt ${filter === s ? 'on' : ''}`} onClick={() => setFilter(s)}>
-            {s === 'todas' ? 'Todas' : PSTATUS[s]} <span className="mono">{s === 'todas' ? pieces.length : pieces.filter((p) => p.status === s).length}</span>
-          </button>
-        ))}
+      <div className="admin-tools">
+        <div className="chips" role="group" aria-label="Mostrar">
+          {(['todas', 'disponivel', 'reservada', 'retirada'] as const).map((s) => (
+            <button key={s} className={`size-opt ${filter === s ? 'on' : ''}`} aria-pressed={filter === s} onClick={() => setFilter(s)}>
+              {s === 'todas' ? 'Todas' : PSTATUS[s]} <span className="count">{s === 'todas' ? pieces.length : pieces.filter((p) => p.status === s).length}</span>
+            </button>
+          ))}
+        </div>
+        <label className="search">
+          <span className="meta">Procurar peça</span>
+          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nome, marca, tipo ou código" />
+        </label>
       </div>
+      {list.length === 0 && <p className="muted">Nenhuma peça com essa busca.</p>}
       <ul className="admin-list">
         <AnimatePresence initial={false}>
           {list.map((p) => (
-            <motion.li key={p.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, x: -24 }} transition={spring}>
+            <motion.li key={p.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.1 } }} transition={spring}>
               <div className="admin-thumb">
                 <PieceVisual piece={p} />
               </div>
               <div className="admin-main">
-                <span className="mono">
-                  {lot(p)} · {p.type} · {p.size || 's/ tam.'}
+                <span className="meta">
+                  {lot(p)}, {p.type.toLowerCase()}, {p.size ? `tamanho ${p.size}` : 'sem tamanho'}
                 </span>
                 <strong>{p.title}</strong>
               </div>
@@ -96,9 +150,19 @@ function PiecesTab() {
                 <Link to={`/admin/peca/${p.id}`} className="link-btn">
                   Editar
                 </Link>
+                {p.status === 'disponivel' && (
+                  <button className="link-btn" onClick={() => changeStatus(p.id, p.title, 'retirada')}>
+                    Vendida no balcão
+                  </button>
+                )}
+                {p.status === 'retirada' && (
+                  <button className="link-btn" onClick={() => changeStatus(p.id, p.title, 'disponivel')}>
+                    Voltar ao catálogo
+                  </button>
+                )}
                 <button
                   className="link-btn danger"
-                  onClick={() => confirm(`Excluir “${p.title}”? Reservas ativas desta peça serão canceladas.`) && deletePiece(p.id)}
+                  onClick={() => remove(p.id, p.title)}
                 >
                   Excluir
                 </button>
@@ -112,10 +176,31 @@ function PiecesTab() {
 }
 
 function ReservationsTab() {
-  const reservations = useDB((d) => d.reservations)
-  const pieces = useDB((d) => d.pieces)
-  const users = useDB((d) => d.users)
+  const reservations = useDB((d) => d.allReservations)
   const store = useDB((d) => d.store)
+  const [busy, setBusy] = useState('')
+  const dialog = useDialog()
+  const close = async (id: string, status: 'retirada' | 'cancelada', title = 'A peça') => {
+    if (status === 'cancelada') {
+      const ok = await dialog.confirm({
+        title: 'Cancelar a reserva?',
+        body: `${title} volta para o catálogo como disponível.`,
+        confirm: 'Cancelar reserva',
+        cancel: 'Manter reserva',
+        danger: true,
+      })
+      if (!ok) return
+    }
+    setBusy(id)
+    try {
+      await closeReservation(id, status)
+      dialog.toast(status === 'retirada' ? 'Marcada como retirada.' : 'Reserva cancelada.')
+    } catch (e) {
+      dialog.toast((e as Error).message, 'erro')
+    } finally {
+      setBusy('')
+    }
+  }
   const active = reservations.filter((r) => r.status === 'ativa')
   const past = reservations.filter((r) => r.status !== 'ativa')
 
@@ -127,34 +212,40 @@ function ReservationsTab() {
         <ul className="admin-list">
           <AnimatePresence initial={false}>
             {active.map((r) => {
-              const p = pieces.find((x) => x.id === r.pieceId)
-              const u = users.find((x) => x.id === r.userId)
+              const p = r.piece
+              const u = r.customer
               const dl = holdDeadline(r, store)
               const late = dl && dl.getTime() < Date.now()
               return (
                 <motion.li key={r.id} layout exit={{ opacity: 0, x: 24 }} transition={spring} className="res-admin">
                   <div className="admin-thumb">{p && <PieceVisual piece={p} />}</div>
                   <div className="admin-main">
-                    <span className="mono">
-                      {p ? lot(p) : '—'} · reservada em {shortDate(r.createdAt)}
+                    <span className="meta">
+                      {p ? lot(p) : 'Peça removida'}, reservada em {shortDate(r.createdAt)}
                       {dl && (
                         <em className={late ? 'late' : ''}>
                           {' '}
-                          · {late ? 'prazo vencido em' : 'retirar até'} {shortDate(dl)}
+                          , {late ? 'prazo vencido em' : 'retirar até'} {shortDate(dl)}
                         </em>
                       )}
                     </span>
                     <strong>{p?.title ?? 'Peça removida'}</strong>
                     <span className="muted">
-                      {u ? `${u.name} · ${u.phone} · ${u.email}` : 'Cliente removido'}
+                      {u ? (
+                        <>
+                          {u.name}, <a href={`tel:${u.phone.replace(/[^\d+]/g, '')}`}>{u.phone}</a>, {u.email}
+                        </>
+                      ) : (
+                        'Cliente removido'
+                      )}
                     </span>
                   </div>
                   <span className="admin-price">{p && brl(p.price)}</span>
                   <div className="admin-actions">
-                    <button className="btn btn-sm" onClick={() => closeReservation(r.id, 'retirada')}>
+                    <button className="btn btn-sm" disabled={busy === r.id} onClick={() => close(r.id, 'retirada', p?.title)}>
                       Marcar retirada
                     </button>
-                    <button className="link-btn danger" onClick={() => confirm('Cancelar a reserva? A peça volta ao catálogo.') && closeReservation(r.id, 'cancelada')}>
+                    <button className="link-btn danger" disabled={busy === r.id} onClick={() => close(r.id, 'cancelada', p?.title ? `“${p.title}”` : undefined)}>
                       Cancelar
                     </button>
                   </div>
@@ -181,9 +272,9 @@ function ReservationsTab() {
               <tbody>
                 {past.map((r) => (
                   <tr key={r.id}>
-                    <td>{pieces.find((p) => p.id === r.pieceId)?.title ?? 'Peça removida'}</td>
-                    <td>{users.find((u) => u.id === r.userId)?.name ?? '—'}</td>
-                    <td className="mono">{shortDate(r.closedAt ?? r.createdAt)}</td>
+                    <td>{r.piece?.title ?? 'Peça removida'}</td>
+                    <td>{r.customer?.name ?? '—'}</td>
+                    <td className="meta">{shortDate(r.closedAt ?? r.createdAt)}</td>
                     <td>{r.status === 'retirada' ? 'Retirada' : 'Cancelada'}</td>
                   </tr>
                 ))}
@@ -199,23 +290,29 @@ function ReservationsTab() {
 function StoreTab() {
   const store = useDB((d) => d.store)
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
 
   const fields: { k: keyof StoreInfo; label: string; hint: string; area?: boolean }[] = [
     { k: 'address', label: 'Endereço de retirada', hint: 'Rua, número, bairro, cidade', area: true },
     { k: 'hours', label: 'Horário de retirada', hint: 'Ex.: dias da semana e horários em que a loja atende' },
     { k: 'holdDays', label: 'Prazo para retirar (dias)', hint: 'Quantos dias a peça fica separada. Deixe vazio se não houver prazo.' },
-    { k: 'payment', label: 'Formas de pagamento', hint: 'Como o cliente paga na retirada' },
+    { k: 'payment', label: 'Formas de pagamento', hint: 'Formas de pagamento aceitas. Deixe vazio para não mostrar.' },
     { k: 'contact', label: 'Contato', hint: 'Telefone, WhatsApp ou Instagram da loja' },
     { k: 'notes', label: 'Observações', hint: 'Qualquer regra extra da retirada', area: true },
   ]
 
-  const submit = (e: FormEvent<HTMLFormElement>) => {
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     const next = Object.fromEntries(fields.map(({ k }) => [k, String(f.get(k) ?? '').trim()])) as StoreInfo
-    saveStore(next)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2200)
+    setError('')
+    try {
+      await saveStore(next)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2200)
+    } catch (err) {
+      setError((err as Error).message)
+    }
   }
 
   return (
@@ -225,7 +322,7 @@ function StoreTab() {
       </p>
       {fields.map((f) => (
         <label key={f.k} className="field">
-          <span className="mono">{f.label}</span>
+          <span className="field-label">{f.label}</span>
           {f.area ? (
             <textarea name={f.k} defaultValue={store[f.k]} rows={2} />
           ) : (
@@ -234,13 +331,14 @@ function StoreTab() {
           <small>{f.hint}</small>
         </label>
       ))}
+      {error && <p className="error" role="alert">{error}</p>}
       <div className="confirm-row">
         <motion.button className="btn" whileTap={{ scale: 0.97 }} transition={spring}>
           Salvar
         </motion.button>
         <AnimatePresence>
           {saved && (
-            <motion.span className="mono ok" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}>
+            <motion.span className="ok" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}>
               Salvo
             </motion.span>
           )}

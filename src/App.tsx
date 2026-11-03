@@ -11,8 +11,9 @@ import Account from './pages/Account'
 import Pickup from './pages/Pickup'
 import Admin from './pages/admin/Admin'
 import PieceForm from './pages/admin/PieceForm'
-import { useCurrentUser } from './lib/db'
+import { useCurrentUser, useDB } from './lib/db'
 import { page } from './lib/motion'
+import { useTitle } from './lib/useTitle'
 
 function Page({ children }: { children: ReactNode }) {
   return (
@@ -24,7 +25,9 @@ function Page({ children }: { children: ReactNode }) {
 
 function RequireUser({ children, admin }: { children: ReactNode; admin?: boolean }) {
   const user = useCurrentUser()
+  const ready = useDB((d) => d.ready)
   const loc = useLocation()
+  if (!ready) return <p className="wrap loading">Carregando…</p>
   if (!user) return <Navigate to={`/entrar?volta=${encodeURIComponent(loc.pathname)}`} replace />
   if (admin && user.role !== 'admin') return <Navigate to="/" replace />
   return <>{children}</>
@@ -32,6 +35,7 @@ function RequireUser({ children, admin }: { children: ReactNode; admin?: boolean
 
 export default function App() {
   const location = useLocation()
+  const offline = useDB((d) => d.offline)
 
   useEffect(() => {
     window.scrollTo({ top: 0 })
@@ -41,6 +45,11 @@ export default function App() {
     <>
       <a className="skip" href="#conteudo">Pular para o conteúdo</a>
       <Header />
+      {offline && (
+        <p className="offline" role="alert">
+          Não foi possível falar com o servidor. Recarregue a página em instantes.
+        </p>
+      )}
       <div id="conteudo">
         <AnimatePresence mode="wait" initial={false}>
           <Routes location={location} key={location.pathname}>
@@ -62,9 +71,9 @@ export default function App() {
 }
 
 function NotFound() {
+  useTitle('Página não encontrada')
   return (
     <section className="wrap empty-state">
-      <p className="mono">Erro 404</p>
       <h1 className="display-m">Esta página não está no cabide.</h1>
       <a className="btn" href="#/catalogo">Ver o catálogo</a>
     </section>

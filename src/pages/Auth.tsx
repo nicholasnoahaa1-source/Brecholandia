@@ -1,16 +1,20 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { hasAnyUser, login, register } from '../lib/db'
+import { login, register, useDB } from '../lib/db'
 import { ease, spring } from '../lib/motion'
+import { useTitle } from '../lib/useTitle'
 
 export default function Auth() {
-  const [mode, setMode] = useState<'entrar' | 'criar'>(hasAnyUser() ? 'entrar' : 'criar')
+  const hasUsers = useDB((d) => d.hasUsers)
+  const [mode, setMode] = useState<'entrar' | 'criar'>(hasUsers ? 'entrar' : 'criar')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  // Aparece só quando alguém tenta criar conta com o e-mail reservado da loja.
+  const [needsCode, setNeedsCode] = useState(false)
   const [params] = useSearchParams()
   const navigate = useNavigate()
-  const first = !hasAnyUser()
+  useTitle(mode === 'entrar' ? 'Entrar' : 'Criar conta')
 
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -22,10 +26,17 @@ export default function Auth() {
       if (mode === 'entrar') await login(val('email'), val('senha'))
       else {
         if (val('senha') !== val('senha2')) throw new Error('As senhas não conferem.')
-        await register({ name: val('nome'), email: val('email'), phone: val('telefone'), password: val('senha') })
+        await register({
+          name: val('nome'),
+          email: val('email'),
+          phone: val('telefone'),
+          password: val('senha'),
+          ...(needsCode ? { adminCode: val('codigo') } : {}),
+        })
       }
       navigate(params.get('volta') || '/catalogo', { replace: true })
     } catch (err) {
+      if ((err as { code?: string }).code === 'codigo_loja') setNeedsCode(true)
       setError((err as Error).message)
     } finally {
       setBusy(false)
@@ -35,18 +46,10 @@ export default function Auth() {
   return (
     <div className="wrap auth">
       <div className="auth-side">
-        <p className="mono">Conta</p>
         <h1 className="display-l">{mode === 'entrar' ? 'Entrar' : 'Criar conta'}</h1>
         <p className="auth-note">
-          A conta serve para reservar peças. Cada peça reservada fica separada no seu nome até você retirar na loja.
+          A conta serve para reservar peças. A peça reservada fica no seu nome até ser retirada na loja ou a reserva ser cancelada.
         </p>
-        {first && (
-          <p className="auth-first">
-            <span className="mono">Primeiro acesso</span>
-            Ainda não existe nenhuma conta. A primeira conta criada será a administradora da loja, com acesso ao cadastro de
-            peças e às reservas.
-          </p>
-        )}
       </div>
 
       <div className="auth-form-wrap">
@@ -60,6 +63,7 @@ export default function Auth() {
               onClick={() => {
                 setMode(m)
                 setError('')
+                setNeedsCode(false)
               }}
             >
               {m === 'entrar' ? 'Já tenho conta' : 'Sou novo por aqui'}
@@ -90,9 +94,15 @@ export default function Auth() {
               type="password"
               autoComplete={mode === 'entrar' ? 'current-password' : 'new-password'}
               minLength={mode === 'criar' ? 6 : undefined}
+              hint={mode === 'criar' ? 'Pelo menos 6 caracteres.' : undefined}
               required
             />
             {mode === 'criar' && <Field label="Repita a senha" name="senha2" type="password" autoComplete="new-password" required />}
+            {mode === 'criar' && needsCode && (
+              <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0, transition: { duration: 0.25, ease } }}>
+                <Field label="Código da loja" name="codigo" type="password" autoComplete="off" hint="Definido pela loja na configuração do servidor." required />
+              </motion.div>
+            )}
 
             <AnimatePresence>
               {error && (
@@ -112,11 +122,24 @@ export default function Auth() {
   )
 }
 
-function Field({ label, ...rest }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
+function Field({ label, hint, type, ...rest }: { label: string; hint?: string } & React.InputHTMLAttributes<HTMLInputElement>) {
+  const [show, setShow] = useState(false)
+  const isPassword = type === 'password'
+  const hintId = hint ? `${rest.name}-dica` : undefined
   return (
-    <label className="field">
-      <span className="mono">{label}</span>
-      <input {...rest} />
-    </label>
+    <div className="field">
+      <label className="field-label" htmlFor={rest.name}>
+        {label}
+      </label>
+      <div className={isPassword ? 'field-row' : undefined}>
+        <input id={rest.name} type={isPassword && show ? 'text' : type} aria-describedby={hintId} {...rest} />
+        {isPassword && (
+          <button type="button" className="field-toggle" aria-pressed={show} onClick={() => setShow((s) => !s)}>
+            {show ? 'Ocultar' : 'Mostrar'}
+          </button>
+        )}
+      </div>
+      {hint && <small id={hintId}>{hint}</small>}
+    </div>
   )
 }

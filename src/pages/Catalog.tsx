@@ -1,11 +1,13 @@
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import PieceCard from '../components/PieceCard'
 import { Swatch } from '../components/bits'
+import { useModalFocus } from '../components/Dialog'
 import { useCurrentUser, useDB, type Piece } from '../lib/db'
 import { ease, spring } from '../lib/motion'
-import { CATEGORIES, COLORS, CONDITIONS, PIECE_TYPES } from '../lib/taxonomy'
+import { CATEGORIES, COLORS, CONDITIONS, PIECE_TYPES, colorById, conditionById, type Condition } from '../lib/taxonomy'
+import { useTitle } from '../lib/useTitle'
 
 type Multi = 'cat' | 'tipo' | 'cor' | 'cond' | 'tam'
 
@@ -20,6 +22,13 @@ export default function Catalog() {
   const user = useCurrentUser()
   const [params, setParams] = useSearchParams()
   const [drawer, setDrawer] = useState(false)
+  // Mostra as peças aos poucos para a página não pesar com catálogos grandes.
+  const PAGE = 24
+  const [limit, setLimit] = useState(PAGE)
+  useTitle('Catálogo')
+  const drawerRef = useRef<HTMLDivElement>(null)
+  const ready = useDB((d) => d.ready)
+  useModalFocus(drawer, drawerRef, () => setDrawer(false))
 
   const get = (k: Multi) => params.getAll(k)
   const q = params.get('q') ?? ''
@@ -70,6 +79,24 @@ export default function Catalog() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, params])
 
+  // Filtros ligados, mostrados acima da grade para tirar um por um.
+  const chips: { key: string; label: string; remove: () => void }[] = [
+    ...(['cat', 'tipo', 'tam'] as const).flatMap((k) =>
+      get(k).map((v) => ({ key: `${k}:${v}`, label: k === 'tam' ? `Tamanho ${v}` : v, remove: () => toggle(k, v) })),
+    ),
+    ...get('cor').map((v) => ({ key: `cor:${v}`, label: colorById(v)?.label ?? v, remove: () => toggle('cor', v) })),
+    ...get('cond').map((v) => ({ key: `cond:${v}`, label: conditionById(v as Condition)?.short ?? v, remove: () => toggle('cond', v) })),
+    ...(min ? [{ key: 'min', label: `A partir de R$ ${min}`, remove: () => set('min', '') }] : []),
+    ...(max ? [{ key: 'max', label: `Até R$ ${max}`, remove: () => set('max', '') }] : []),
+    ...(q ? [{ key: 'q', label: `“${q}”`, remove: () => set('q', '') }] : []),
+    ...(!showReserved ? [{ key: 'res', label: 'Sem as reservadas', remove: () => set('reservadas', '') }] : []),
+  ]
+
+  // Volta ao começo da lista quando os filtros mudam.
+  const paramsKey = params.toString()
+  useEffect(() => setLimit(PAGE), [paramsKey])
+  const shown = filtered.slice(0, limit)
+
   const activeCount = ['cat', 'tipo', 'cor', 'cond', 'tam'].reduce((n, k) => n + params.getAll(k).length, 0) + (min ? 1 : 0) + (max ? 1 : 0) + (q ? 1 : 0)
 
   const filters = (
@@ -88,13 +115,16 @@ export default function Catalog() {
   return (
     <div className="wrap catalog">
       <div className="catalog-head">
-        <h1 className="display-l">
-          Catálogo
-          <sup className="mono">{String(filtered.length).padStart(3, '0')}</sup>
-        </h1>
+        <div>
+          <h1 className="display-l">Catálogo</h1>
+          <p className="catalog-count" aria-hidden>
+            {!ready ? 'Carregando peças' : filtered.length === 1 ? '1 peça' : `${filtered.length} peças`}
+            {ready && filtered.length !== visible.length && ` de ${visible.length}`}
+          </p>
+        </div>
         <div className="catalog-tools">
           <label className="search">
-            <span className="mono">Buscar</span>
+            <span className="meta">Buscar peça</span>
             <input
               type="search"
               value={q}
@@ -103,7 +133,7 @@ export default function Catalog() {
             />
           </label>
           <label className="select">
-            <span className="mono">Ordem</span>
+            <span className="meta">Ordenar por</span>
             <select value={sort} onChange={(e) => set('ordem', e.target.value === 'recentes' ? '' : e.target.value)}>
               {SORTS.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -128,8 +158,52 @@ export default function Catalog() {
           )}
         </aside>
 
-        <section aria-live="polite">
-          {visible.length === 0 ? (
+        <section aria-busy={!ready}>
+          <p className="sr-only" role="status">
+            {ready ? `${filtered.length} ${filtered.length === 1 ? 'peça encontrada' : 'peças encontradas'}` : 'Carregando catálogo'}
+          </p>
+          <AnimatePresence initial={false}>
+            {chips.length > 0 && (
+              <motion.div
+                className="active-filters"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto', transition: { duration: 0.25, ease } }}
+                exit={{ opacity: 0, height: 0, transition: { duration: 0.15 } }}
+              >
+                <ul aria-label="Filtros ligados">
+                  <AnimatePresence initial={false}>
+                    {chips.map((c) => (
+                      <motion.li
+                        key={c.key}
+                        layout
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.12 } }}
+                        transition={spring}
+                      >
+                        <button className="chip" onClick={c.remove} aria-label={`Tirar filtro ${c.label}`}>
+                          {c.label}
+                          <span aria-hidden className="chip-x" />
+                        </button>
+                      </motion.li>
+                    ))}
+                  </AnimatePresence>
+                </ul>
+                {chips.length > 1 && (
+                  <button className="link-btn" onClick={clear}>
+                    Limpar tudo
+                  </button>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+          {!ready ? (
+            <div className="grid" aria-hidden>
+              {Array.from({ length: 8 }, (_, i) => (
+                <div key={i} className="card-skeleton" />
+              ))}
+            </div>
+          ) : visible.length === 0 ? (
             <EmptyCatalog admin={user?.role === 'admin'} />
           ) : filtered.length === 0 ? (
             <div className="empty-state small">
@@ -142,11 +216,21 @@ export default function Catalog() {
             <LayoutGroup>
               <motion.div layout className="grid">
                 <AnimatePresence mode="popLayout">
-                  {filtered.map((p) => (
+                  {shown.map((p) => (
                     <PieceCard key={p.id} piece={p} />
                   ))}
                 </AnimatePresence>
               </motion.div>
+              {filtered.length > limit && (
+                <div className="more">
+                  <p className="muted">
+                    Mostrando {limit} de {filtered.length} peças
+                  </p>
+                  <button className="btn btn-line" onClick={() => setLimit((l) => l + PAGE)}>
+                    Mostrar mais {Math.min(PAGE, filtered.length - limit)}
+                  </button>
+                </div>
+              )}
             </LayoutGroup>
           )}
         </section>
@@ -163,6 +247,7 @@ export default function Catalog() {
               onClick={() => setDrawer(false)}
             />
             <motion.div
+              ref={drawerRef}
               className="drawer"
               role="dialog"
               aria-modal="true"
@@ -173,9 +258,14 @@ export default function Catalog() {
             >
               <div className="drawer-head">
                 <span className="display-s">Filtros</span>
-                <button className="link-btn" onClick={clear}>
-                  Limpar
-                </button>
+                <div className="drawer-head-actions">
+                  <button className="link-btn" onClick={clear}>
+                    Limpar
+                  </button>
+                  <button className="link-btn" onClick={() => setDrawer(false)}>
+                    Fechar
+                  </button>
+                </div>
               </div>
               <div className="drawer-body">{filters}</div>
               <button className="btn btn-block" onClick={() => setDrawer(false)}>
@@ -192,7 +282,6 @@ export default function Catalog() {
 function EmptyCatalog({ admin }: { admin: boolean }) {
   return (
     <div className="empty-state small">
-      <p className="mono">Catálogo vazio</p>
       <p className="display-s">Ainda não há peças cadastradas.</p>
       {admin ? (
         <Link className="btn" to="/admin/peca/nova">
@@ -312,7 +401,7 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
     <fieldset className="fgroup">
       <legend>
         <button className="fgroup-head" onClick={() => setOpen((o) => !o)} aria-expanded={open} type="button">
-          <span className="mono">{title}</span>
+          <span className="fgroup-title">{title}</span>
           <motion.span animate={{ rotate: open ? 0 : -90 }} transition={spring} aria-hidden>
             ▾
           </motion.span>
@@ -343,7 +432,7 @@ function Check({ on, onClick, label, n }: { on: boolean; onClick: () => void; la
         </AnimatePresence>
       </span>
       <span className="check-label">{label}</span>
-      <span className="mono check-n">{n}</span>
+      <span className="meta check-n">{n}</span>
     </button>
   )
 }
