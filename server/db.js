@@ -6,16 +6,23 @@ import { ensureIndexes } from './app.js'
 if (existsSync('.env')) process.loadEnvFile('.env')
 
 /**
- * Senhas com @ : / # ? % quebram a string de conexão se não forem codificadas.
- * Aqui o usuário e a senha são codificados automaticamente (o que já estiver
- * codificado continua igual).
+ * Deixa a MONGODB_URI no formato que o driver aceita, corrigindo os erros mais
+ * comuns ao colar o valor na Vercel:
+ * - aspas em volta, prefixo "MONGODB_URI=" ou o comando inteiro do mongosh;
+ * - senha com @ : / # ? % sem codificar;
+ * - senha ainda entre < > (como aparece no modelo do Atlas);
+ * - porta junto de mongodb+srv (não é permitido).
  */
 export function normalizeMongoUri(raw) {
-  const uri = String(raw ?? '').trim()
+  const text = String(raw ?? '')
+  // Pega só o trecho que começa em mongodb:// ou mongodb+srv:// até um espaço ou aspas.
+  const found = /mongodb(?:\+srv)?:\/\/[^\s"'`]+/.exec(text)
+  const uri = (found ? found[0] : text).trim()
   // O último @ antes do endereço separa a senha do host (a senha pode ter @ / # :).
   const m = /^(mongodb(?:\+srv)?:\/\/)(.*)@([^@/?#]+)((?:[/?].*)?)$/s.exec(uri)
   if (!m) return uri
-  const [, scheme, userinfo, host, rest] = m
+  const [, scheme, userinfo, hostPart, rest] = m
+  const host = scheme === 'mongodb+srv://' ? hostPart.replace(/:\d+$/, '') : hostPart
   const i = userinfo.indexOf(':')
   const enc = (s) => {
     let v = s
@@ -26,14 +33,26 @@ export function normalizeMongoUri(raw) {
     }
     return encodeURIComponent(v)
   }
-  const auth = i === -1 ? enc(userinfo) : `${enc(userinfo.slice(0, i))}:${enc(userinfo.slice(i + 1))}`
+  let user = i === -1 ? userinfo : userinfo.slice(0, i)
+  let pass = i === -1 ? null : userinfo.slice(i + 1)
+  if (pass && pass.length > 2 && pass.startsWith('<') && pass.endsWith('>') && pass !== '<db_password>' && pass !== '<password>')
+    pass = pass.slice(1, -1)
+  user = enc(user)
+  const auth = pass === null ? user : `${user}:${enc(pass)}`
   return `${scheme}${auth}@${host}${rest}`
 }
 
 /** Motivo legível da falha, sem expor senha nem endereço. */
-export function describeDbError(err) {
+export function describeDbError(err, raw = process.env.MONGODB_URI) {
   const msg = String(err?.message ?? '')
-  if (err?.code === 'NO_URI') return 'a variável MONGODB_URI não está configurada na Vercel'
+  const text = String(raw ?? '')
+  if (err?.code === 'NO_URI' || !text.trim()) return 'a variável MONGODB_URI não está configurada na Vercel'
+  if (/<db_password>|<password>/i.test(text))
+    return 'a MONGODB_URI ainda tem o texto <db_password>; troque pela senha do usuário do banco, sem os sinais < >'
+  if (!/mongodb(\+srv)?:\/\//.test(text))
+    return 'a MONGODB_URI não tem uma string de conexão; ela deve começar com mongodb+srv://'
+  if (/mongosh|--username/.test(text) || !/mongodb(\+srv)?:\/\/[^\s"'`/]*@/.test(text))
+    return 'a MONGODB_URI está sem usuário e senha; use a string de Connect > Drivers, no formato mongodb+srv://USUARIO:SENHA@...'
   if (err?.name === 'MongoParseError') return 'a MONGODB_URI está em formato inválido'
   if (err?.code === 18 || /auth|authentication/i.test(msg)) return 'o Atlas recusou o usuário ou a senha da MONGODB_URI'
   if (/ENOTFOUND|querySrv/i.test(msg)) return 'o endereço do cluster na MONGODB_URI não foi encontrado'
