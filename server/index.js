@@ -5,11 +5,11 @@ import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createApp } from './app.js'
-import { getDb } from './db.js'
+import { describeDbError, getDb } from './db.js'
 import { appConfig } from './config.js'
 
 const { client, db } = await getDb().catch((err) => {
-  console.error(err.message)
+  console.error(`Banco de dados indisponível: ${describeDbError(err)}.`, err.message)
   process.exit(1)
 })
 

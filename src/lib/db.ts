@@ -56,6 +56,7 @@ export type StoreInfo = {
 type Data = {
   ready: boolean
   offline: boolean
+  offlineReason: string
   pieces: Piece[]
   store: StoreInfo
   user: User | null
@@ -67,6 +68,7 @@ type Data = {
 let data: Data = {
   ready: false,
   offline: false,
+  offlineReason: '',
   pieces: [],
   store: { address: '', hours: '', contact: '', holdDays: '', payment: '', notes: '' },
   user: null,
@@ -118,10 +120,10 @@ async function api<T>(path: string, init?: { method?: string; body?: unknown }):
 export async function refresh() {
   try {
     const b = await api<{ pieces: Piece[]; store: StoreInfo; user: User | null; hasUsers: boolean }>('/bootstrap')
-    set({ ...b, ready: true, offline: false, ...(b.user ? {} : { myReservations: [], allReservations: [] }) })
+    set({ ...b, ready: true, offline: false, offlineReason: '', ...(b.user ? {} : { myReservations: [], allReservations: [] }) })
     if (b.user) await loadReservations(false)
-  } catch {
-    set({ ready: true, offline: true })
+  } catch (e) {
+    set({ ready: true, offline: true, offlineReason: (e as Error).message })
   }
 }
 

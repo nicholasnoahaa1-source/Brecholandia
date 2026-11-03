@@ -36,6 +36,7 @@ function RequireUser({ children, admin }: { children: ReactNode; admin?: boolean
 export default function App() {
   const location = useLocation()
   const offline = useDB((d) => d.offline)
+  const offlineReason = useDB((d) => d.offlineReason)
 
   useEffect(() => {
     window.scrollTo({ top: 0 })
@@ -47,7 +48,9 @@ export default function App() {
       <Header />
       {offline && (
         <p className="offline" role="alert">
-          Não foi possível falar com o servidor. Recarregue a página em instantes.
+          {offlineReason.startsWith('Banco de dados')
+            ? offlineReason
+            : 'Não foi possível falar com o servidor. Recarregue a página em instantes.'}
         </p>
       )}
       <div id="conteudo">
