@@ -1,6 +1,6 @@
 // Quem administra a loja. Só estes e-mails veem a área "Gerenciar".
 // Pode ser trocado pela variável ADMIN_EMAILS (vários separados por vírgula).
-const DEFAULT_ADMIN_EMAILS = 'nicholasnoahaa3@gmail.com'
+const DEFAULT_ADMIN_EMAILS = 'nicholasnoahaa1@gmail.com'
 
 export function appConfig(env = process.env) {
   return {
