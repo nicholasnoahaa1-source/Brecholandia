@@ -57,7 +57,7 @@ Testam a API (cadastro, login, permissões, reserva exclusiva, retirada, cancela
 
 ## Quem administra
 
-Só a conta **nicholasnoahaa3@gmail.com** vê a área **Gerenciar** (peças, reservas e dados da loja). O papel é calculado pelo e-mail a cada acesso, então nenhuma outra conta vira administradora, nem mexendo no banco.
+Só a conta **nicholasnoahaa1@gmail.com** vê a área **Gerenciar** (peças, reservas e dados da loja). O papel é calculado pelo e-mail a cada acesso, então nenhuma outra conta vira administradora, nem mexendo no banco.
 
 Como o site não confirma e-mail, esse endereço é **reservado**: para criar a conta com ele é preciso o código da loja, definido na variável `ADMIN_CODE`. Sem essa variável, ninguém consegue criar a conta da loja.
 
